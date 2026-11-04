@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
+    <ProjectReference Include="..\Morph.Engines\Morph.Engines.csproj" />
+  </ItemGroup>
+
+</Project>

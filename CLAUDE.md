@@ -12,8 +12,8 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 
 ## Commands (repo root, PowerShell)
 - Build: `dotnet build Morph.slnx -c Debug` (warnings are errors)
-- Unit + golden tests: `dotnet test Morph.slnx --filter "Category!=UI"`
-- UI smoke tests (needs an unlocked interactive desktop): `dotnet test tests/Morph.UiTests`
+- Unit + golden tests: `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
+- UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)
 - Regenerate fixtures: `dotnet run build/gen-fixtures.cs`
 - Run: `dotnet run --project src/Morph.App`
 - Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (test-signed locally; the Store signs releases)
@@ -65,3 +65,4 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 2. Relevant tests pass; new behaviour has a test (golden test for any new capability row).
 3. For UI changes: run the app (or the FlaUI MCP) and check the behaviour; say so explicitly if you could not.
 4. Report briefly: what changed, how it was verified, what's next. Update `CHANGELOG.md`; update this file if a convention changed.
+5. Commit after every task: a short, plain, human one-line message (e.g. `Add drop catchers and the first wheel`). No `Co-Authored-By` or any Claude attribution.

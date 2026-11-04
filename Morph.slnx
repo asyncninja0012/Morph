@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Morph.App/Morph.App.csproj" />
+    <Project Path="src/Morph.Core/Morph.Core.csproj" />
+    <Project Path="src/Morph.Engines/Morph.Engines.csproj" />
+    <Project Path="src/Morph.Overlay/Morph.Overlay.csproj" />
+    <Project Path="src/Morph.Worker/Morph.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Morph.Core.Tests/Morph.Core.Tests.csproj" />
+    <Project Path="tests/Morph.Engines.Tests/Morph.Engines.Tests.csproj" />
+    <Project Path="tests/Morph.Overlay.Tests/Morph.Overlay.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+</Solution>

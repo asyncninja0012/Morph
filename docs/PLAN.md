@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — next task 0.1.** Open questions in §12 still need answers before the tasks that depend on them (wheel direction before 0.3 polish; toolchain before 0.6 and 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.3 done, next task 0.4.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -151,16 +151,20 @@ App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` as JSON on
 - If `DragEnter` arrives within ~150 ms with `CF_HDROP` (or `FileGroupDescriptorW`, D3), it's a file drag → show the wheel.
 - If no `DragEnter` arrives, it was a text selection or window move → hide the catchers silently.
 - **Spike question:** does OLE's `DoDragDrop` loop re-run target detection on a key-state change, or only on mouse move? If only on mouse move, nudge with a 0-distance `SendInput` mouse move after showing the catchers.
+  **Answer (0.3):** no nudge needed. With zero mouse movement after the tap, `DragEnter` reached the catcher 15–45 ms after it appeared (ole32 `DoDragDrop` source, Release build). Verified with a WinForms source process; still to confirm by hand with Explorer, desktop, Edge and Outlook.
 
 **The wheel window.** A separate WPF window, `AllowsTransparency=True` (per-pixel alpha), ~440×440 DIP, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, `ShowActivated=false`. Centred on the cursor and clamped to the monitor work area. The app is PerMonitorV2-aware (app.manifest). Position comes from `GetCursorPos` in physical pixels, converted per monitor DPI. Wedges are plain WPF `Path`s generated from the option count (6–8, plus an outer ring for sub-choices). Hit-testing during the drag uses `DragOver` coordinates, not mouse events (no mouse events arrive during an OLE drag).
 
-**Drop handling.** Both windows set `e.Effects = DragDropEffects.Copy` in `DragEnter`/`DragOver`/`Drop`, so the source never moves or links. A drop on a wedge enqueues the job and returns `Copy`. A drop on the catcher or the wheel centre returns `None` (IX-4 cancel). `Esc` (seen by the hook) hides both windows, and the drag continues to whatever is underneath.
+**Drop handling.** Effects are only ever `Copy` or `None`, so the source never moves or links. Over a wedge: `Copy`; a drop enqueues the job. Over the catcher or the wheel centre: `None` (shows the "no" cursor; releasing cancels, IX-4). `Esc` (seen by the hook) hides both windows; while they are up the hook **swallows Esc**, because otherwise the source's own `QueryContinueDrag` would cancel the drag. After the button is released the windows stay until OLE delivers `Drop`/`DragLeave` (2 s cap), so a drop is never retargeted to the window underneath.
+
+**Catcher implementation note (0.3):** WPF clears `WS_EX_LAYERED` in `WM_STYLECHANGING` on any non-per-pixel window (both `Window` and `HwndSource`), which turned the catcher into an opaque black screen. The catcher is a bare `HwndSource` with a hook that keeps the bit, plus `SetLayeredWindowAttributes(alpha 1)`.
 
 **Modifier keys.** By default the tap passes through to the source, so Explorer's badge flickers, which is harmless. Spike checks whether an Alt tap pops up a menu bar in Edge/Outlook after the drop; if it does, swallow only the Alt tap (return 1 from the hook).
 
 **Reading files.** `DragEventArgs.Data.GetData(DataFormats.FileDrop)` → `string[]`. Virtual files: read `FileGroupDescriptorW` and copy each `FileContents` stream to `%TEMP%\Morph\in\<guid>\`, run the job on those, and write output to the user's Downloads folder (not next to a temp file).
 
 **Wheel ≤ 100 ms (IX-2):** the windows are created at startup and kept hidden. Show = `SetWindowPos(SWP_SHOWWINDOW | SWP_NOACTIVATE)` plus a 120 ms scale/opacity animation. The matrix lookup runs on `DragEnter` against a precomputed per-format table.
+**Measured (0.3, Release ReadyToRun, injected input):** tap → wheel visible 37–62 ms once warm. The first drag of a session takes ~170 ms; ~130 ms of it is waiting for the first cross-process OLE `DragEnter`, which the startup warm-up (all windows rendered once off-screen) cannot cover. Revisit in 5.1 if it shows on the reference laptop.
 
 **Fallback if the spike fails** (exit criterion: 20/20 drags from Explorer, desktop, Edge downloads, and Outlook convert end to end): ship hotkey-first (IX-5: Explorer selection via `IShellWindows` → `IFolderView2::GetSelection`, desktop via `SWC_DESKTOP`) plus the right-click menu. The wheel UI is reused unchanged; only the trigger changes.
 
@@ -223,7 +227,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 |---|---|---|---|---|
 | .NET 10 + WindowsDesktop runtime (self-contained) | MIT | 150–170 MB | App/Worker | 0 |
 | CommunityToolkit.Mvvm | MIT | 0.3 MB | App, Editors | 0 |
-| Microsoft.Windows.CsWin32 (build-time) | MIT | 0 | Overlay, App | 0 |
+| Microsoft.Windows.CsWin32 0.3.367 (build-time) | MIT | 0 | Overlay, App | 0 |
 | Magick.NET-Q8-x64 | Apache-2.0 (bundles libheif/libde265 LGPL inside Magick.Native DLL — see R5) | 30 MB | Engines | 0 |
 | FFmpeg LGPL custom build (ffmpeg.exe + ffprobe.exe) | LGPL-2.1 | 40 MB | package | 0 |
 | PDFium (pdfium-binaries) | BSD-3 / Apache-2.0 | 6 MB | Engines | 2 |
@@ -241,7 +245,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 | Microsoft.WindowsAppSDK (Ai only) | MIT | ~30 MB in pack | Engines.Ai | 4 |
 | Microsoft.ML.OnnxRuntime.DirectML | MIT | 20 MB (pack) | Engines.Ai | 4 |
 | LibreOffice portable (pack) | MPL-2.0 | 350 MB (pack) | pack | 4 |
-| xunit.v3, FlaUI.UIA3 (tests only) | Apache-2.0 / MIT | – | tests | 0 |
+| xunit.v3 4.0.2, FlaUI.UIA3 (tests only) | Apache-2.0 / MIT | – | tests | 0 |
 
 Estimated core download ≈ 95–110 MB, installed ≈ 260–290 MB. Tight; tracked in CI from Phase 0.
 
@@ -286,7 +290,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 3. Are the "Add BG" (screenshot framing) and "Edit" (adjustments) tools seen in `docs/reference/` in scope for 1.0? They aren't in the PRD.
 4. Toolchain: OK to require Visual Studio 2026 Build Tools with the C++ workload (for Morph.Shell) and the Windows SDK (makeappx/signtool)?
 5. GitHub repo public or private? (CI minutes; FFmpeg/pack binaries are hosted on Releases.)
-6. Wheel visual direction A or B (§4, `docs/design/`).
+6. ~~Wheel visual direction A or B~~ → **A**.
 7. Reference laptop for §7 targets (CPU/GPU), so the perf numbers mean something.
 
 **Risks**
