@@ -31,8 +31,21 @@ public interface IEngine
     Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct);
 }
 
-/// <summary>App ↔ Worker wire format: one <see cref="JobRequest"/> on stdin, one <see cref="JobResult"/> line on stdout.</summary>
-[JsonSourceGenerationOptions(UseStringEnumConverter = true)]
+/// <summary>One stdout line from the Worker: progress while running, then exactly one result.</summary>
+public sealed record WorkerMessage(JobProgress? Progress = null, JobResult? Result = null);
+
+/// <summary>
+/// App ↔ Worker wire format: one <see cref="JobRequest"/> line on stdin, <see cref="WorkerMessage"/> lines on stdout.
+/// Closing stdin asks the Worker to cancel.
+/// </summary>
+[JsonSourceGenerationOptions(UseStringEnumConverter = true, NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(JobRequest))]
-[JsonSerializable(typeof(JobResult))]
+[JsonSerializable(typeof(WorkerMessage))]
 public sealed partial class JobJson : JsonSerializerContext;
+
+/// <summary>Reports on the calling thread, in order (unlike <see cref="Progress{T}"/>, which posts to the thread pool).</summary>
+public sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
+{
+    public void Report(T value) => report(value);
+}

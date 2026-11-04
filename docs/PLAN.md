@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.4 done, next task 0.5.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.5 done, next task 0.6.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -135,7 +135,7 @@ public interface IEditor        // in Morph.Editors; never touches files
 }
 ```
 
-App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` as JSON on stdin and writes JSON lines on stdout: `{"p":0.42,"s":"encoding"}` … `{"result":{…}}`. Cancellation = close the Job Object handle (kills the worker and any ffmpeg/LibreOffice children). Serialisation via `System.Text.Json` source-gen.
+App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` JSON line on stdin and writes `WorkerMessage` JSON lines on stdout: `{"Progress":{"Fraction":0.42,"Stage":"encoding"}}` … `{"Result":{…}}`. Serialisation via `System.Text.Json` source-gen. **Cancellation (0.5):** the App closes the Worker's stdin; the Worker kills ffmpeg, deletes its temp files and reports `Cancelled`. If it hasn't exited after 3 s, the App closes the Job Object handle, which kills the Worker and any ffmpeg/LibreOffice children (temp files may then remain). Closing the handle alone would always leave temp files, because a killed Worker can't clean up.
 
 ## 3. The drag wheel (Phase 0 spike, highest risk)
 
@@ -231,7 +231,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 | CommunityToolkit.Mvvm | MIT | 0.3 MB | App, Editors | 0 |
 | Microsoft.Windows.CsWin32 0.3.367 (build-time) | MIT | 0 | Overlay, App | 0 |
 | Magick.NET-Q8-x64 14.17.2 | Apache-2.0 (bundles libheif/libde265 LGPL inside Magick.Native DLL — see R5) | 30 MB | Engines | 0 |
-| FFmpeg LGPL custom build (ffmpeg.exe + ffprobe.exe) | LGPL-2.1 | 40 MB | package | 0 |
+| FFmpeg LGPL custom build (ffmpeg.exe + ffprobe.exe). **Interim (0.5):** BtbN `n9.0.2-45-g1e65c6cd5d-win64-lgpl-9.0` autobuild, SHA-256-pinned in `build/fetch-binaries.ps1` | LGPL-2.1 | 40 MB target (BtbN static build is far larger, see 0.6 size check) | package | 0 |
 | PDFium (pdfium-binaries) | BSD-3 / Apache-2.0 | 6 MB | Engines | 2 |
 | UglyToad.PdfPig | Apache-2.0 | 2 MB | Engines | 2 |
 | PDFsharp 6 | MIT | 2 MB | Engines | 2 |

@@ -7,3 +7,9 @@ Licence: Apache-2.0 (https://github.com/dlemstra/Magick.NET/blob/main/License.tx
 Includes ImageMagick (ImageMagick licence, https://imagemagick.org/script/license.php) and its
 delegate libraries. libheif and libde265 are LGPL; see PLAN.md risk R5.
 --------------------------------------------------------------------------------
+FFmpeg 9.0.2 (ffmpeg.exe, ffprobe.exe), LGPL build
+https://ffmpeg.org/  Build: https://github.com/BtbN/FFmpeg-Builds (win64-lgpl variant)
+Licence: GNU Lesser General Public License v2.1 or later (https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
+Shipped as separate, replaceable executables. Morph does not link to FFmpeg.
+Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 (written source offer to follow with the 1.0 release, PLAN 5.4)
+--------------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows;
 
-using Morph.App.Jobs;
 using Morph.Core.Jobs;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
@@ -16,20 +15,20 @@ public sealed partial class App : Application
     // shortcut: static wedges for the task 0.3 spike; the capability matrix (task 1.2) supplies real options.
     private static readonly WheelItem[] ConvertItems =
     [
-        new("convert.png", "PNG", "î¤›"), new("convert.jpg", "JPG", "î¤›"), new("convert.webp", "WebP", "î¤›"),
-        new("convert.pdf", "PDF", "î¢¥"), new("convert.gif", "GIF", "îœ”"), new("convert.bmp", "BMP", "î¤›"),
+        new("convert.png", "PNG", ""), new("convert.jpg", "JPG", ""), new("convert.webp", "WebP", ""),
+        new("convert.mp4", "MP4", ""), new("convert.gif", "GIF", ""), new("convert.bmp", "BMP", ""),
     ];
 
     private static readonly WheelItem[] ToolItems =
     [
-        new("compress", "Compress", "îœ¿"), new("resize", "Resize", "î€"), new("rotate", "Rotate", "îž­"),
-        new("crop", "Crop", "îž¨"), new("strip-metadata", "Strip info", "î¥†"), new("ocr", "Text (OCR)", "î£’"),
+        new("compress", "Compress", ""), new("resize", "Resize", ""), new("rotate", "Rotate", ""),
+        new("crop", "Crop", ""), new("strip-metadata", "Strip info", ""), new("ocr", "Text (OCR)", ""),
     ];
 
     private static readonly WheelItem[] ActionItems =
     [
-        new("action.copy-to", "Copy to", "î£ˆ"), new("action.move-to", "Move to", "î£ž"), new("action.copy-path", "Copy path", "îœ›"),
-        new("action.terminal", "Terminal", "î–"), new("action.share", "Share", "îœ­"), new("action.float", "Float", "îœ˜"),
+        new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""), new("action.copy-path", "Copy path", ""),
+        new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
     ];
 
     private readonly DragGestureDetector _dragGestures = new();
@@ -39,7 +38,7 @@ public sealed partial class App : Application
     {
         base.OnStartup(e);
 
-        // shortcut: spike logging to the launching console (tasks 0.2â€“0.3); replace with ILogger when logging lands in Phase 1.
+        // shortcut: spike logging to the launching console (tasks 0.2–0.3); replace with ILogger when logging lands in Phase 1.
         PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
         _dragGestures.GestureDetected += g => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {g}");
 
@@ -67,7 +66,7 @@ public sealed partial class App : Application
     private static async void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
-        if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || item.Id == "convert.pdf" || files.Paths.Count == 0)
+        if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
         {
             Console.WriteLine($"{item.Id} isn't wired up yet.");
             return;
@@ -78,7 +77,10 @@ public sealed partial class App : Application
             // Output goes next to each original; virtual files (Outlook) have no real folder, so they go to Downloads.
             var results = await Task.WhenAll(files.Paths
                 .GroupBy(p => files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(p)!)
-                .Select(g => WorkerClient.RunAsync(new JobRequest(Guid.NewGuid(), item.Id, "imaging", [.. g], g.Key))));
+                .Select(g => WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"),
+                    new JobRequest(Guid.NewGuid(), item.Id, item.Id == "convert.mp4" ? "media" : "imaging", [.. g], g.Key),
+                    new Progress<JobProgress>(p => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {item.Id} {p.Fraction:P0} {p.Stage}")),
+                    CancellationToken.None)));
             foreach (var r in results)
             {
                 Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {r.Status} in {r.Elapsed.TotalMilliseconds:F0} ms: "

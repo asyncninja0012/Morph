@@ -1,9 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
     <PackageReference Include="Magick.NET-Q8-x64" />
     <InternalsVisibleTo Include="Morph.Engines.Tests" />
+  </ItemGroup>
+
+  <!-- Fetched by build/fetch-binaries.ps1; flows to the Worker, App and test output folders. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffmpeg.exe;$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffprobe.exe"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffmpeg.exe')"
+          CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" Visible="false" />
   </ItemGroup>
 
 </Project>

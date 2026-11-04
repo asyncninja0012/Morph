@@ -14,7 +14,14 @@
 - `Morph.Core.Jobs`: `JobRequest`, `JobResult`, `IEngine`, `EngineException`, `OutputNamer`, and a source-generated JSON context for the App ↔ Worker wire format (request on stdin, one result line on stdout).
 - Input format is taken from magic bytes, never from ImageMagick's own detection, so script-like coders are unreachable. Magick memory capped at min(1 GB, 25% RAM), 30k px edge.
 - Magick.NET-Q8-x64 14.17.2 (Apache-2.0); `package/THIRD-PARTY-NOTICES.txt`.
+- Video conversion (task 0.5): MOV/MP4 → MP4 (H.264 + AAC) via the bundled ffmpeg.exe, from a new MP4 wedge on the Convert wheel. `-progress` output is parsed against the ffprobe duration and reported as job progress. The H.264 encoder is probed once by test-encoding one frame (NVENC → QSV → AMF → Media Foundation hardware → Media Foundation software; never libx264) and cached in `%LOCALAPPDATA%\Morph\cache\encoders.json`. The input demuxer is forced and only the `file` protocol allowed, so playlists can't open other files or URLs.
+- Worker sandbox: each Worker runs in a Job Object (kill on close, 2 GB per process or 4 GB for video, at most 4 processes, below-normal priority, no crash dialog). Cancel closes the Worker's stdin; it stops ffmpeg and deletes temp files, and the Job Object is closed if it hasn't exited after 3 s. The Worker now reports progress lines before its result. `WorkerClient` moved to `Morph.Core`.
+- `build/fetch-binaries.ps1`: downloads the LGPL FFmpeg build with a SHA-256 pin into `artifacts/binaries/`; CI runs it and tries to install Media Foundation.
+- Tests: `MediaEngineTests` (progress parsing; MOV→MP4 codecs and duration; cancel kills ffmpeg and leaves no temp; non-video rejected; ffmpeg tests skip until binaries are fetched), `WorkerJobObjectTests`.
 - Tests: `OutputNamerTests`, `ImagingEngineTests` (JPG→PNG, original untouched, no temp left; non-image rejected), `DragFilesTests` (descriptor parsing, unsafe names).
+
+### Fixed
+- Wheel glyphs in `App.xaml.cs` were garbled by an encoding round-trip in task 0.4; restored.
 
 ### Changed
 - The wheel opens on press-and-hold instead of a tap: hold Shift/Ctrl/Alt for 200 ms during a drag. A quick tap does nothing; releasing the key closes the wheel and the drag continues. The probe starts on key down, so it finishes inside the hold.
