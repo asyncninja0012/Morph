@@ -46,12 +46,11 @@ public sealed class CapabilityMatrixTests
         Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.gif", "convert.bmp"], Ids([]));
 
     [Fact]
-    public void Heic_output_is_disabled_with_a_store_link_without_hevc()
+    public void Heic_output_is_disabled_without_hevc()
     {
         var option = CapabilityMatrix.LoadDefault(_ => false).OptionsFor([FileFormat.Jpg], WheelGroup.Convert).Single(o => o.Tool.Id == "convert.heic");
 
         Assert.NotNull(option.DisabledReason);
-        Assert.Equal("ms-windows-store", option.FixLink?.Scheme);
     }
 
     [Fact]

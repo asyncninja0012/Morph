@@ -11,7 +11,7 @@
     {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"}
   ],
   "requirements": {
-    "hevc-ext": {"reason": "Needs HEVC Video Extensions. Drop here to get them.", "fix": "ms-windows-store://pdp/?ProductId=9NMZLZ57R3T7"}
+    "hevc-ext": {"reason": "Needs HEVC Video Extensions."}
   },
   "rows": [
     {"in": "jpg", "out": "png", "tool": "convert", "engine": "imaging"},

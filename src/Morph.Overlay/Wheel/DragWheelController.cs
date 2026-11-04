@@ -62,10 +62,7 @@ public sealed class DragWheelController : IDisposable
         WarmUp();
     }
 
-    /// <summary>
-    /// A file drag was dropped on a wedge. Virtual files (Outlook) have already been copied to a temp folder,
-    /// except on a disabled wedge, where the drop only asks for its fix link.
-    /// </summary>
+    /// <summary>A file drag was dropped on a wedge. Virtual files (Outlook) have already been copied to a temp folder.</summary>
     public event Action<WheelItem, DroppedFiles>? ItemDropped;
 
     // shortcut: spike diagnostics (task 0.3); becomes ILogger in Phase 1.
@@ -254,9 +251,8 @@ public sealed class DragWheelController : IDisposable
 
         var item = _wheel.ItemAt(e);
         _wheel.Highlight(item);
-        // Copy only, so the source never moves or deletes the original. A disabled wedge shows Link: dropping
-        // there opens its fix link; None would make OLE skip the drop entirely.
-        e.Effects = Effect(item);
+        // Copy only, so the source never moves or deletes the original.
+        e.Effects = item is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
     }
 
@@ -269,7 +265,7 @@ public sealed class DragWheelController : IDisposable
     private void OnWheelDrop(object sender, DragEventArgs e)
     {
         var item = _wheel.ItemAt(e);
-        e.Effects = Effect(item);
+        e.Effects = item is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
         _oleDragsInside = 0;
         var files = _files;
@@ -280,7 +276,7 @@ public sealed class DragWheelController : IDisposable
             return;
         }
 
-        if (isVirtual && item.DisabledReason is null)
+        if (isVirtual)
         {
             try
             {
@@ -295,13 +291,6 @@ public sealed class DragWheelController : IDisposable
 
         ItemDropped?.Invoke(item, new DroppedFiles(files, isVirtual));
     }
-
-    private static DragDropEffects Effect(WheelItem? item) => item switch
-    {
-        null => DragDropEffects.None,
-        { DisabledReason: not null } => DragDropEffects.Link,
-        _ => DragDropEffects.Copy,
-    };
 
     private void OnOleLeave()
     {

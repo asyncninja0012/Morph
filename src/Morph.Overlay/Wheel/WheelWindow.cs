@@ -20,9 +20,6 @@ internal sealed class WheelWindow : Window
     private readonly ScaleTransform _scale = new(1, 1, SizeDip / 2, SizeDip / 2);
     private readonly List<(Path Wedge, TextBlock Icon, TextBlock Label)> _wedges = [];
     private IReadOnlyList<WheelItem> _items = [];
-    private TextBlock _countText = new();
-    private TextBlock _captionText = new();
-    private TextBlock _reasonText = new();
     private Palette _palette = Palette.Light;
     private int? _highlighted;
 
@@ -66,19 +63,12 @@ internal sealed class WheelWindow : Window
         }
 
         _canvas.Children.Add(Circle(WheelGeometry.CentreRadius, p.CentreFill, p.Stroke));
-        _countText = Text(count, 18, FontWeights.SemiBold, new Point(0, -6));
-        _countText.Foreground = p.Label;
-        _captionText = Text(caption, 10, FontWeights.Normal, new Point(0, 12));
-        _captionText.Foreground = p.Icon;
-        _reasonText = Text("", 10, FontWeights.Normal, new Point(0, -26));
-        _reasonText.Width = WheelGeometry.CentreRadius * 2 - 8;
-        Canvas.SetLeft(_reasonText, Centre.X - _reasonText.Width / 2);
-        _reasonText.TextWrapping = TextWrapping.Wrap;
-        _reasonText.Foreground = p.Label;
-        _reasonText.Visibility = Visibility.Collapsed;
-        _canvas.Children.Add(_countText);
-        _canvas.Children.Add(_captionText);
-        _canvas.Children.Add(_reasonText);
+        var countText = Text(count, 18, FontWeights.SemiBold, new Point(0, -6));
+        countText.Foreground = p.Label;
+        var captionText = Text(caption, 10, FontWeights.Normal, new Point(0, 12));
+        captionText.Foreground = p.Icon;
+        _canvas.Children.Add(countText);
+        _canvas.Children.Add(captionText);
     }
 
     /// <summary>Item under a drag position (DragOver coordinates; no mouse events arrive during OLE drags).</summary>
@@ -108,12 +98,6 @@ internal sealed class WheelWindow : Window
         }
 
         _highlighted = index;
-
-        // A disabled wedge explains itself in the centre (CV-6) instead of the file count.
-        var reason = index is { } h ? _items[h].DisabledReason : null;
-        _reasonText.Text = reason ?? "";
-        _reasonText.Visibility = reason is null ? Visibility.Collapsed : Visibility.Visible;
-        _countText.Visibility = _captionText.Visibility = reason is null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void ShowAt(System.Drawing.Point cursor)
@@ -145,9 +129,6 @@ internal sealed class WheelWindow : Window
     {
         var (wedge, icon, label) = _wedges[i];
         var p = _palette;
-        var disabled = _items[i].DisabledReason is not null;
-        icon.Opacity = label.Opacity = disabled ? 0.4 : 1;
-        highlighted &= !disabled;
         wedge.Fill = highlighted ? p.Accent : p.Wedge;
         wedge.Stroke = highlighted ? p.Accent : p.Stroke;
         icon.Foreground = highlighted ? p.OnAccent : p.Icon;

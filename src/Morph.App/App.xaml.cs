@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -77,33 +76,19 @@ public sealed partial class App : Application
 
     // The wheel goes by extension: it opens on DragEnter (no I/O allowed) and virtual files only have names.
     // The Worker sniffs the real format and refuses a file that isn't what its extension says.
+    // Options this PC can't run (e.g. HEIC output without HEVC) are left out rather than shown disabled.
     // shortcut: beta isn't drawn yet (no row is beta until PDF → DOCX in Phase 2).
     private static IReadOnlyList<WheelItem> ConvertItems(IReadOnlyList<string> files) =>
     [
         .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], WheelGroup.Convert)
-            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph, o.DisabledReason, o.FixLink)),
+            .Where(o => o.DisabledReason is null)
+            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
     ];
 
     // shortcut: conversions only, results to the console; toasts (1.7) replace this.
     private static void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
-        if (item.DisabledReason is not null)
-        {
-            try
-            {
-                if (item.FixLink is { } fix)
-                {
-                    Process.Start(new ProcessStartInfo(fix.AbsoluteUri) { UseShellExecute = true }); // opens the Store page
-                }
-            }
-            catch (System.ComponentModel.Win32Exception ex)
-            {
-                Console.Error.WriteLine($"Couldn't open {item.FixLink}: {ex.Message}");
-            }
-
-            return;
-        }
         if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
         {
             Console.WriteLine($"{item.Id} isn't wired up yet.");

@@ -9,7 +9,7 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// HEIC output through Windows (PLAN §5): there is no LGPL-compatible HEVC encoder to bundle, so this uses the
-/// HEIF + HEVC Store extensions. The matrix disables HEIC output when the App's probe finds them missing.
+/// HEIF + HEVC Store extensions. The App hides HEIC output when its probe finds them missing.
 /// </summary>
 internal static class WicHeic
 {
