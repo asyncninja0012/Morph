@@ -1,0 +1,39 @@
+{
+  "tools": [
+    {"id": "convert.png", "label": "PNG", "glyph": "\ue91b", "hint": "Convert to PNG", "wheel": "Convert"},
+    {"id": "convert.jpg", "label": "JPG", "glyph": "\ue91b", "hint": "Convert to JPG", "wheel": "Convert"},
+    {"id": "convert.webp", "label": "WebP", "glyph": "\ue91b", "hint": "Convert to WebP", "wheel": "Convert"},
+    {"id": "convert.mp4", "label": "MP4", "glyph": "\ue714", "hint": "Convert to MP4", "wheel": "Convert"},
+    {"id": "convert.gif", "label": "GIF", "glyph": "\ue714", "hint": "Convert to GIF", "wheel": "Convert"},
+    {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"}
+  ],
+  "requirements": {},
+  "rows": [
+    {"in": "jpg", "out": "png", "tool": "convert", "engine": "imaging"},
+    {"in": "webp", "out": "png", "tool": "convert", "engine": "imaging"},
+    {"in": "gif", "out": "png", "tool": "convert", "engine": "imaging"},
+    {"in": "bmp", "out": "png", "tool": "convert", "engine": "imaging"},
+    {"in": "tiff", "out": "png", "tool": "convert", "engine": "imaging"},
+    {"in": "png", "out": "jpg", "tool": "convert", "engine": "imaging"},
+    {"in": "webp", "out": "jpg", "tool": "convert", "engine": "imaging"},
+    {"in": "gif", "out": "jpg", "tool": "convert", "engine": "imaging"},
+    {"in": "bmp", "out": "jpg", "tool": "convert", "engine": "imaging"},
+    {"in": "tiff", "out": "jpg", "tool": "convert", "engine": "imaging"},
+    {"in": "jpg", "out": "webp", "tool": "convert", "engine": "imaging"},
+    {"in": "png", "out": "webp", "tool": "convert", "engine": "imaging"},
+    {"in": "gif", "out": "webp", "tool": "convert", "engine": "imaging"},
+    {"in": "bmp", "out": "webp", "tool": "convert", "engine": "imaging"},
+    {"in": "tiff", "out": "webp", "tool": "convert", "engine": "imaging"},
+    {"in": "jpg", "out": "gif", "tool": "convert", "engine": "imaging"},
+    {"in": "png", "out": "gif", "tool": "convert", "engine": "imaging"},
+    {"in": "webp", "out": "gif", "tool": "convert", "engine": "imaging"},
+    {"in": "bmp", "out": "gif", "tool": "convert", "engine": "imaging"},
+    {"in": "tiff", "out": "gif", "tool": "convert", "engine": "imaging"},
+    {"in": "jpg", "out": "bmp", "tool": "convert", "engine": "imaging"},
+    {"in": "png", "out": "bmp", "tool": "convert", "engine": "imaging"},
+    {"in": "webp", "out": "bmp", "tool": "convert", "engine": "imaging"},
+    {"in": "gif", "out": "bmp", "tool": "convert", "engine": "imaging"},
+    {"in": "tiff", "out": "bmp", "tool": "convert", "engine": "imaging"},
+    {"in": "mov", "out": "mp4", "tool": "convert", "engine": "media"}
+  ]
+}

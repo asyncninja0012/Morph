@@ -1,0 +1,89 @@
+using System.Text;
+using System.Text.Json;
+
+using Morph.Core.Capabilities;
+using Morph.Core.Formats;
+
+namespace Morph.Core.Tests;
+
+public sealed class CapabilityMatrixTests
+{
+    private static readonly CapabilityMatrix Shipped = CapabilityMatrix.LoadDefault(_ => true);
+
+    [Fact]
+    public void Shipped_rows_use_known_formats_and_every_tool_has_a_row()
+    {
+        Assert.All(Shipped.Rows, r =>
+        {
+            Assert.Equal(r.In, FileFormat.FromExtension(r.In).Id);
+            Assert.True(r.Out is null || FileFormat.FromExtension(r.Out).Id == r.Out, $"unknown output format {r.Out}");
+            Assert.NotEqual(r.In, r.Out);
+        });
+        Assert.All(Shipped.OptionsFor([], WheelGroup.Convert), o => Assert.Contains(Shipped.Rows, r => r.ToolId == o.Tool.Id));
+    }
+
+    [Fact]
+    public void Options_fit_every_file()
+    {
+        Assert.Equal(["convert.png", "convert.webp", "convert.gif", "convert.bmp"], Ids([FileFormat.Jpg]));
+        Assert.Equal(["convert.mp4"], Ids([FileFormat.Mov]));
+        Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Mov]));
+        Assert.Empty(Ids([FileFormat.Unknown]));
+    }
+
+    [Fact]
+    public void Target_format_is_hidden_only_when_every_file_already_has_it()
+    {
+        Assert.DoesNotContain("convert.png", Ids([FileFormat.Png, FileFormat.Png]));
+        Assert.Contains("convert.png", Ids([FileFormat.Jpg, FileFormat.Png]));
+        Assert.Contains("convert.mp4", Ids([FileFormat.Mp4, FileFormat.Mov]));
+        Assert.Null(Shipped.RowFor(FileFormat.Png, "convert.png"));
+    }
+
+    [Fact]
+    public void No_files_offers_every_tool_of_the_wheel() =>
+        Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.mp4", "convert.gif", "convert.bmp"], Ids([]));
+
+    [Fact]
+    public void Row_names_the_engine() =>
+        Assert.Equal("media", Shipped.RowFor(FileFormat.Mov, "convert.mp4")?.Engine);
+
+    [Fact]
+    public void Missing_requirement_disables_with_reason_and_link()
+    {
+        var json = """
+            {
+              "tools": [ { "id": "convert.heic", "label": "HEIC", "glyph": "x", "hint": "h", "wheel": "Convert" } ],
+              "requirements": { "hevc": { "reason": "Needs the HEVC extension.", "fix": "ms-windows-store://pdp/?ProductId=X" } },
+              "rows": [
+                { "in": "jpg", "out": "heic", "tool": "convert", "engine": "imaging", "requires": ["hevc"] },
+                { "in": "png", "out": "heic", "tool": "convert", "engine": "imaging", "beta": true }
+              ]
+            }
+            """;
+
+        var missing = Load(json, _ => false).OptionsFor([FileFormat.Jpg, FileFormat.Png], WheelGroup.Convert).Single();
+        var present = Load(json, _ => true).OptionsFor([FileFormat.Jpg], WheelGroup.Convert).Single();
+
+        Assert.Equal("Needs the HEVC extension.", missing.DisabledReason);
+        Assert.Equal(new Uri("ms-windows-store://pdp/?ProductId=X"), missing.FixLink);
+        Assert.True(missing.Beta);
+        Assert.Null(present.DisabledReason);
+        Assert.False(present.Beta);
+    }
+
+    [Theory]
+    [InlineData("""{ "tools": [], "requirements": {}, "rows": [ { "in": "jpg", "out": "png", "tool": "convert", "engine": "imaging" } ] }""")]
+    [InlineData("""{ "tools": [], "requirements": {}, "rows": [ { "in": "jpg", "tool": "x", "engine": "e", "requires": ["nope"] } ] }""")]
+    public void Undeclared_tool_or_requirement_is_rejected(string json) =>
+        Assert.Throws<InvalidDataException>(() => Load(json, _ => true));
+
+    [Fact]
+    public void Misspelt_field_is_rejected() =>
+        Assert.ThrowsAny<JsonException>(() => Load("""{ "tools": [], "requirements": {}, "rows": [], "row": [] }""", _ => true));
+
+    private static string[] Ids(FileFormat[] files) => [.. Shipped.OptionsFor(files, WheelGroup.Convert).Select(o => o.Tool.Id)];
+
+    private static CapabilityMatrix Load(string json, Func<string, bool> isAvailable) =>
+        CapabilityMatrix.Load(new MemoryStream(Encoding.UTF8.GetBytes(json)), isAvailable);
+}

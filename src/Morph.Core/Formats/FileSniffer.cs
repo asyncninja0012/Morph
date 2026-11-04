@@ -44,7 +44,7 @@ public sealed class FileSniffer : IFileSniffer
     /// <summary>Format from the file header alone. Returns <see cref="FileFormat.Zip"/> for any ZIP that isn't ODF.</summary>
     internal static FileFormat Detect(ReadOnlySpan<byte> h, string extension)
     {
-        var ext = NormalizeExtension(extension);
+        var claimed = FileFormat.FromExtension(extension);
         switch (h)
         {
             case [0xFF, 0xD8, 0xFF, ..]: return FileFormat.Jpg;
@@ -70,7 +70,7 @@ public sealed class FileSniffer : IFileSniffer
             case [(byte)'P', (byte)'K', 0x03, 0x04, ..]: return OdfFromFirstEntry(h) ?? FileFormat.Zip;
             case [(byte)'P', (byte)'K', 0x05, 0x06, ..]: return FileFormat.Zip; // empty archive
             case [0x1F, 0x8B, ..]: return FileFormat.Gz;
-            case [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..]: return IsoBmff(h, ext);
+            case [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..]: return IsoBmff(h, claimed);
         }
 
         if (h[..Math.Min(h.Length, 1024)].IndexOf("%PDF-"u8) >= 0)
@@ -102,31 +102,13 @@ public sealed class FileSniffer : IFileSniffer
 
         if (text.IndexOf((byte)0) < 0)
         {
-            return ext switch
-            {
-                "txt" => FileFormat.Txt,
-                "md" => FileFormat.Md,
-                "html" => FileFormat.Html,
-                "csv" => FileFormat.Csv,
-                "srt" => FileFormat.Srt,
-                _ => FileFormat.Unknown,
-            };
+            return claimed.Id is "txt" or "md" or "html" or "csv" or "srt" ? claimed : FileFormat.Unknown;
         }
 
         return FileFormat.Unknown;
     }
 
-    internal static string NormalizeExtension(string extension) =>
-        extension.TrimStart('.').ToLowerInvariant() switch
-        {
-            "jpeg" or "jpe" or "jfif" => "jpg",
-            "tif" => "tiff",
-            "htm" => "html",
-            "markdown" => "md",
-            var e => e,
-        };
-
-    private static FileFormat IsoBmff(ReadOnlySpan<byte> h, string ext)
+    private static FileFormat IsoBmff(ReadOnlySpan<byte> h, FileFormat claimed)
     {
         var boxSize = (int)Math.Min(BinaryPrimitives.ReadUInt32BigEndian(h), (uint)h.Length);
         var brands = new List<string>();
@@ -149,12 +131,8 @@ public sealed class FileSniffer : IFileSniffer
         {
             ["qt  ", ..] => FileFormat.Mov,
             ["M4A " or "M4B " or "M4P ", ..] => FileFormat.M4a,
-            _ => ext switch // generic brands (isom, mp42, ...) don't say whether there's video
-            {
-                "m4a" => FileFormat.M4a,
-                "mov" => FileFormat.Mov,
-                _ => FileFormat.Mp4,
-            },
+            _ when claimed == FileFormat.M4a || claimed == FileFormat.Mov => claimed, // generic brands (isom, mp42, ...) don't say whether there's video
+            _ => FileFormat.Mp4,
         };
     }
 

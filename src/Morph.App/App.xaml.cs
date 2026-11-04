@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
 
+using Morph.Core.Capabilities;
+using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
@@ -12,13 +14,10 @@ namespace Morph.App;
 
 public sealed partial class App : Application
 {
-    // shortcut: static wedges for the task 0.3 spike; the capability matrix (task 1.2) supplies real options.
-    private static readonly WheelItem[] ConvertItems =
-    [
-        new("convert.png", "PNG", ""), new("convert.jpg", "JPG", ""), new("convert.webp", "WebP", ""),
-        new("convert.mp4", "MP4", ""), new("convert.gif", "GIF", ""), new("convert.bmp", "BMP", ""),
-    ];
+    // shortcut: no requirement probes yet, so anything with a requirement counts as missing; HEVC/WIC probing lands in 1.5.
+    private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(_ => false);
 
+    // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land.
     private static readonly WheelItem[] ToolItems =
     [
         new("compress", "Compress", ""), new("resize", "Resize", ""), new("rotate", "Rotate", ""),
@@ -48,7 +47,7 @@ public sealed partial class App : Application
 
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
         {
-            ModifierKey.Shift => [.. ConvertItems.Where(i => !AllAlready(files, i.Id))],
+            ModifierKey.Shift => ConvertItems(files),
             ModifierKey.Ctrl => ToolItems,
             _ => ActionItems,
         });
@@ -66,7 +65,17 @@ public sealed partial class App : Application
         }
     }
 
-    // shortcut: image conversions only, one Worker per drop, results to the console; the queue (1.3) and toasts (1.7) replace this.
+    // The wheel goes by extension: it opens on DragEnter (no I/O allowed) and virtual files only have names.
+    // The Worker sniffs the real format and refuses a file that isn't what its extension says.
+    // shortcut: disabled and beta options aren't drawn yet (no row has a requirement or beta flag); disabled ones are left out.
+    private static IReadOnlyList<WheelItem> ConvertItems(IReadOnlyList<string> files) =>
+    [
+        .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], WheelGroup.Convert)
+            .Where(o => o.DisabledReason is null)
+            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
+    ];
+
+    // shortcut: conversions only, one Worker per drop, results to the console; the queue (1.3) and toasts (1.7) replace this.
     private static async void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
@@ -78,11 +87,14 @@ public sealed partial class App : Application
 
         try
         {
-            // Output goes next to each original; virtual files (Outlook) have no real folder, so they go to Downloads.
+            // Files already in the target format are skipped. Output goes next to each original; virtual files
+            // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder).
             var results = await Task.WhenAll(files.Paths
-                .GroupBy(p => files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(p)!)
+                .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
+                .Where(f => f.Row is not null)
+                .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!))
                 .Select(g => WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"),
-                    new JobRequest(Guid.NewGuid(), item.Id, item.Id == "convert.mp4" ? "media" : "imaging", [.. g], g.Key),
+                    new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder),
                     new Progress<JobProgress>(p => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {item.Id} {p.Fraction:P0} {p.Stage}")),
                     CancellationToken.None)));
             foreach (var r in results)
@@ -96,11 +108,6 @@ public sealed partial class App : Application
             Console.Error.WriteLine($"Job failed to run: {ex}");
         }
     }
-
-    // No "convert to PNG" when every dragged file is already a PNG (jpeg counts as jpg).
-    // shortcut: by extension; the capability matrix (task 1.2) decides from sniffed formats.
-    private static bool AllAlready(IReadOnlyList<string> files, string toolId) =>
-        files.Count > 0 && files.All(f => Path.GetExtension(f).TrimStart('.').ToLowerInvariant().Replace("jpeg", "jpg") == toolId["convert.".Length..]);
 
     protected override void OnExit(ExitEventArgs e)
     {

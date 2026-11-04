@@ -51,5 +51,25 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
     public static readonly FileFormat Tar = Of("tar", FileKind.Archive, "application/x-tar");
     public static readonly FileFormat Gz = Of("gz", FileKind.Archive, "application/gzip");
 
+    private static readonly Dictionary<string, FileFormat> ByExtension = new FileFormat[]
+    {
+        Jpg, Png, Gif, Bmp, Webp, Tiff, Heic, Avif, Mp4, Mov, Mkv, Webm, Avi, Mp3, M4a, Wav, Flac, Ogg, Opus, Pdf,
+        Docx, Xlsx, Pptx, Odt, Ods, Odp, Txt, Md, Html, Csv, Srt, Vtt, Zip, Tar, Gz,
+    }.ToDictionary(f => f.Id);
+
+    /// <summary>
+    /// The format a file claims by its extension, without touching the file (".jpeg" → jpg). Used where no I/O
+    /// is allowed (the wheel opens on DragEnter, virtual files only have names); the Worker sniffs the real format.
+    /// </summary>
+    public static FileFormat FromExtension(string extension) =>
+        ByExtension.GetValueOrDefault(extension.TrimStart('.').ToLowerInvariant() switch
+        {
+            "jpeg" or "jpe" or "jfif" => "jpg",
+            "tif" => "tiff",
+            "htm" => "html",
+            "markdown" => "md",
+            var e => e,
+        }) ?? Unknown;
+
     private static FileFormat Of(string id, FileKind kind, string mime) => new(id, kind, "." + id, mime);
 }

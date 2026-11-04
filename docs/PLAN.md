@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.2.** 1.1 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.3.** 1.1–1.2 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -41,7 +41,7 @@ src/
   Morph.Editors (WPF lib)    → Core
   Morph.App     (WPF exe)    → Core, Overlay, Editors   (starts Worker as a process; never references Engines)
   Morph.Shell   (C++/WinRT DLL, .vcxproj, built by msbuild)  no .NET refs; talks to App via a named pipe / command line
-package/  AppxManifest.xml, Assets/, THIRD-PARTY-NOTICES.txt, capabilities.json is copied from Core
+package/  AppxManifest.xml, Assets/, THIRD-PARTY-NOTICES.txt (capabilities.json is embedded in Morph.Core)
 build/    pack.ps1, size-check.ps1, gen-fixtures.cs, fetch-binaries.ps1 (ffmpeg, pdfium with SHA-256 pins)
 tests/
   Morph.Core.Tests           unit: sniffing, matrix, naming, queue, undo
@@ -88,6 +88,11 @@ public interface ICapabilityMatrix
     IReadOnlyList<WheelOption> OptionsFor(IReadOnlyList<FileFormat> files, WheelGroup wheel);
 }
 public sealed record WheelOption(ToolDescriptor Tool, string? DisabledReason, Uri? FixLink);
+```
+
+**As built (1.2):** `Morph.Core.Capabilities`. `capabilities.json` holds `tools` (wheel order), `requirements` (id → reason + fix link) and `rows`; unknown fields and undeclared tool/requirement ids fail at load. Fields are added when a task needs them: `ToolDescriptor` is `(Id, Label, Glyph, Hint, Wheel)` for now (Kind, OutputSuffix, SubChoices, CountsTowardTrial come with tools/trial), `CapabilityRow` has no `Defaults`/`Install` yet (1.4 parameters, packs), `WheelOption` carries `Beta`. A conversion treats files already in the target format as fitting (JPG + PNG still offers PNG; those files are skipped). The wheel looks formats up **by extension** (`FileFormat.FromExtension`): it opens on DragEnter where no I/O is allowed, and virtual files only have names; the Worker sniffs and refuses mismatches.
+
+```csharp
 
 public sealed record JobRequest(
     Guid Id, string ToolId, string Engine,
