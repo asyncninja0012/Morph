@@ -18,4 +18,13 @@ Budget: 5 or fewer project plugins/MCPs. Everything below runs locally except th
 - Still loading: `claude-code-setup` plugin and the claude.ai connectors (Notion, Gmail, Drive, Calendar, HyperFrames, Firecrawl, Claude Docs). Disable unused connectors at claude.ai → Settings → Connectors.
 
 ## Context overhead
-Run `/context` in a fresh session and record the numbers here. If a plugin isn't used in a phase, disable it with `claude plugin disable <name> --scope project`.
+Measured 4 Nov 2026 (fresh session, 1M window): **~20.5k tokens total (~2%)**.
+
+| Item | Tokens | Notes |
+|---|---|---|
+| Skills (71) | 9.7k | Largest item. Mostly caveman, ponytail, synced linkedin-skills, claude.ai built-ins |
+| MCP tools (121, loaded on demand) | 8k | Mostly claude.ai connectors; Learn + FlaUI are a small share |
+| Memory files (1) | 2.5k | `CLAUDE.md` |
+| Custom agents (3) | 0.4k | caveman's cavecrew agents (unused) |
+
+Cheapest cuts if needed: disable the synced `linkedin-skills` and unused claude.ai connectors (user-level, no effect on Morph). Re-measure at each phase boundary; if a plugin isn't used in a phase, disable it with `claude plugin disable <name> --scope project`.
