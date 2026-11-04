@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -20,7 +21,6 @@ public sealed class DragWheelController : IDisposable
     public static readonly TimeSpan HoldDelay = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(250); // cold first use measured ~160 ms; an invisible catcher lingering longer is harmless
     private static readonly TimeSpan DropGrace = TimeSpan.FromSeconds(2);
-    private const string VirtualFilesFormat = "FileGroupDescriptorW";
 
     private readonly DragGestureDetector _detector;
     private readonly Func<ModifierKey, IReadOnlyList<WheelItem>> _itemsFor;
@@ -39,6 +39,7 @@ public sealed class DragWheelController : IDisposable
     private bool _holdElapsed;
     private bool _fileDragConfirmed;
     private IReadOnlyList<string> _files = [];
+    private bool _virtualFiles;
     private bool _dark = IsDarkMode();
 
     public DragWheelController(DragGestureDetector detector, Func<ModifierKey, IReadOnlyList<WheelItem>> itemsFor)
@@ -60,8 +61,8 @@ public sealed class DragWheelController : IDisposable
         WarmUp();
     }
 
-    /// <summary>A file drag was dropped on a wedge. Paths are empty for virtual files (Outlook) until task 0.4.</summary>
-    public event Action<WheelItem, IReadOnlyList<string>>? ItemDropped;
+    /// <summary>A file drag was dropped on a wedge. Virtual files (Outlook) have already been copied to a temp folder.</summary>
+    public event Action<WheelItem, DroppedFiles>? ItemDropped;
 
     // shortcut: spike diagnostics (task 0.3); becomes ILogger in Phase 1.
     public event Action<string>? Diagnostic;
@@ -207,13 +208,14 @@ public sealed class DragWheelController : IDisposable
         }
 
         _probeTimer.Stop();
-        if (FilesIn(e.Data) is not { } files)
+        if (DragFiles.Peek(e.Data) is not var (files, isVirtual))
         {
             Hide("probe: OLE drag without files");
             return;
         }
 
         _files = files;
+        _virtualFiles = isVirtual;
         _fileDragConfirmed = true;
         Diagnostic?.Invoke($"probe: file DragEnter {Elapsed()} after press ({files.Count} path(s))");
         if (_holdElapsed)
@@ -266,11 +268,27 @@ public sealed class DragWheelController : IDisposable
         e.Handled = true;
         _oleDragsInside = 0;
         var files = _files;
+        var isVirtual = _virtualFiles;
         Hide(item is null ? "dropped on the wheel centre: cancelled" : $"dropped on {item.Id}");
-        if (item is not null)
+        if (item is null)
         {
-            ItemDropped?.Invoke(item, files);
+            return;
         }
+
+        if (isVirtual)
+        {
+            try
+            {
+                files = DragFiles.ExtractVirtual(e.Data);
+            }
+            catch (Exception ex) when (ex is IOException or COMException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                Diagnostic?.Invoke($"virtual files could not be read: {ex.Message}");
+                return;
+            }
+        }
+
+        ItemDropped?.Invoke(item, new DroppedFiles(files, isVirtual));
     }
 
     private void OnOleLeave()
@@ -311,17 +329,6 @@ public sealed class DragWheelController : IDisposable
     }
 
     private string Elapsed() => $"{Stopwatch.GetElapsedTime(_pressTimestamp).TotalMilliseconds:F0} ms";
-
-    private static IReadOnlyList<string>? FilesIn(IDataObject data)
-    {
-        if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] paths)
-        {
-            return paths;
-        }
-
-        // Virtual files (Outlook, Teams; D3): reading them comes in task 0.4.
-        return data.GetDataPresent(VirtualFilesFormat) ? [] : null;
-    }
 
     private static (string Count, string Caption) Describe(IReadOnlyList<string> files)
     {

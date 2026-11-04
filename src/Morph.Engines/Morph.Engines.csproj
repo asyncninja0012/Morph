@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
+    <PackageReference Include="Magick.NET-Q8-x64" />
+    <InternalsVisibleTo Include="Morph.Engines.Tests" />
   </ItemGroup>
 
 </Project>

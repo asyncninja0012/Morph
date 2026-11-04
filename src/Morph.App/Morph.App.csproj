@@ -11,7 +11,19 @@
   <ItemGroup>
     <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
     <ProjectReference Include="..\Morph.Overlay\Morph.Overlay.csproj" />
+    <!-- Build order only: the App never references Engines; the Worker's output is copied next to Morph.exe below. -->
+    <ProjectReference Include="..\Morph.Worker\Morph.Worker.csproj" ReferenceOutputAssembly="false" Private="false" />
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
   </ItemGroup>
+
+  <Target Name="CopyWorker" AfterTargets="Build">
+    <MSBuild Projects="..\Morph.Worker\Morph.Worker.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs" PropertyName="WorkerTargetPath" />
+    </MSBuild>
+    <ItemGroup>
+      <WorkerFiles Include="$([System.IO.Path]::GetDirectoryName($(WorkerTargetPath)))\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WorkerFiles)" DestinationFiles="@(WorkerFiles->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

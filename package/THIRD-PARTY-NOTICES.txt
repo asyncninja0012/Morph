@@ -1,0 +1,9 @@
+Morph includes the following third-party software.
+
+--------------------------------------------------------------------------------
+Magick.NET-Q8-x64 14.17.2
+https://github.com/dlemstra/Magick.NET
+Licence: Apache-2.0 (https://github.com/dlemstra/Magick.NET/blob/main/License.txt)
+Includes ImageMagick (ImageMagick licence, https://imagemagick.org/script/license.php) and its
+delegate libraries. libheif and libde265 are LGPL; see PLAN.md risk R5.
+--------------------------------------------------------------------------------

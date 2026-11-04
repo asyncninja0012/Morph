@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.3 done, next task 0.4.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.4 done, next task 0.5.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -162,6 +162,7 @@ App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` as JSON on
 **Modifier keys.** The held key passes through to the source; over our windows the effect is forced to `Copy`/`None`, so it has no effect there. Still to check: whether an Alt press pops up a menu bar in Edge/Outlook after the drop; if it does, swallow only Alt (return 1 from the hook). Native modifier drags (Shift = move, Ctrl = copy, Alt = shortcut) still work when the key is pressed **before** the drag starts, because the hook is not installed yet; pressing and holding one mid-drag now opens the wheel instead (R8).
 
 **Reading files.** `DragEventArgs.Data.GetData(DataFormats.FileDrop)` → `string[]`. Virtual files: read `FileGroupDescriptorW` and copy each `FileContents` stream to `%TEMP%\Morph\in\<guid>\`, run the job on those, and write output to the user's Downloads folder (not next to a temp file).
+**Done in 0.4:** names from the descriptor are reduced to safe leaf names (no `..`, no device names). The copy runs synchronously inside `Drop` (the source may release the data afterwards), so a large attachment stalls the UI for the copy; `IDataObjectAsyncCapability` is the upgrade if that shows in testing. Temp outputs are `.morph-<guid>.tmp` but **not hidden**: Magick and ffmpeg open with `CREATE_ALWAYS`, which fails on hidden files.
 
 **Wheel ≤ 100 ms (IX-2):** the windows are created at startup and kept hidden. Show = `SetWindowPos(SWP_SHOWWINDOW | SWP_NOACTIVATE)` plus a 120 ms scale/opacity animation. The matrix lookup runs on `DragEnter` against a precomputed per-format table.
 **Measured (0.3, Release ReadyToRun, injected input):** tap → wheel visible 37–62 ms once warm. The first drag of a session takes ~170 ms; ~130 ms of it is waiting for the first cross-process OLE `DragEnter`, which the startup warm-up (all windows rendered once off-screen) cannot cover. Revisit in 5.1 if it shows on the reference laptop.
@@ -229,7 +230,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 | .NET 10 + WindowsDesktop runtime (self-contained) | MIT | 150–170 MB | App/Worker | 0 |
 | CommunityToolkit.Mvvm | MIT | 0.3 MB | App, Editors | 0 |
 | Microsoft.Windows.CsWin32 0.3.367 (build-time) | MIT | 0 | Overlay, App | 0 |
-| Magick.NET-Q8-x64 | Apache-2.0 (bundles libheif/libde265 LGPL inside Magick.Native DLL — see R5) | 30 MB | Engines | 0 |
+| Magick.NET-Q8-x64 14.17.2 | Apache-2.0 (bundles libheif/libde265 LGPL inside Magick.Native DLL — see R5) | 30 MB | Engines | 0 |
 | FFmpeg LGPL custom build (ffmpeg.exe + ffprobe.exe) | LGPL-2.1 | 40 MB | package | 0 |
 | PDFium (pdfium-binaries) | BSD-3 / Apache-2.0 | 6 MB | Engines | 2 |
 | UglyToad.PdfPig | Apache-2.0 | 2 MB | Engines | 2 |
