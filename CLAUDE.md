@@ -17,7 +17,9 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)
 - Regenerate fixtures: `dotnet run build/gen-fixtures.cs`
 - Run: `dotnet run --project src/Morph.App`
-- Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (test-signed locally; the Store signs releases)
+- Dev signing cert (once): `./build/dev-cert.ps1`, then run the printed `Import-Certificate` line in an elevated PowerShell
+- Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`
+- From Git Bash, run any `.ps1` as `powershell.exe -NoProfile -ExecutionPolicy Bypass -File build/<name>.ps1`
 - Size budget: `./build/size-check.ps1` (fails over 120 MB download / 300 MB installed)
 - Format check: `dotnet format Morph.slnx --verify-no-changes`
 

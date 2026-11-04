@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Not part of Morph.slnx: restored by build/pack.ps1 only, to fetch makeappx.exe and signtool.exe without a Windows SDK install. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageDownload Include="Microsoft.Windows.SDK.BuildTools" Version="[10.0.28000.2705]" />
+  </ItemGroup>
+
+</Project>

@@ -30,3 +30,13 @@ jobs:
       - run: dotnet build Morph.slnx -c Release --no-restore
       # UI tests need an interactive desktop and run locally only.
       - run: dotnet test Morph.slnx -c Release --no-build --filter-not-trait "Category=UI"
+      - run: ./build/pack.ps1 -Configuration Release -NoSign
+        shell: pwsh
+      # shortcut: report-only until the custom small FFmpeg build lands (PLAN 0.6 numbers); then drop continue-on-error.
+      - run: ./build/size-check.ps1
+        shell: pwsh
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Morph_x64.msix
+          path: artifacts/Morph_x64.msix

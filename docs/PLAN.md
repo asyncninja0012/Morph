@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.5 done, next task 0.6.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (toolchain before 0.6 and 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 0 — 0.1–0.6 done; Phase 0 demo (manual drag tests from Explorer, desktop, Edge, Outlook) still to run before the gate.** Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -248,6 +248,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 | Microsoft.ML.OnnxRuntime.DirectML | MIT | 20 MB (pack) | Engines.Ai | 4 |
 | LibreOffice portable (pack) | MPL-2.0 | 350 MB (pack) | pack | 4 |
 | xunit.v3 4.0.2, FlaUI.UIA3 (tests only) | Apache-2.0 / MIT | – | tests | 0 |
+| Microsoft.Windows.SDK.BuildTools 10.0.28000.2705 (build-time: makeappx, signtool; never shipped) | Microsoft SDK licence | 0 | `build/tools` | 0 |
 
 Estimated core download ≈ 95–110 MB, installed ≈ 260–290 MB. Tight; tracked in CI from Phase 0.
 
@@ -290,7 +291,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 1. Approve deviations D1–D11 (especially D4 redaction-by-rasterising and D5 SharpZipLib).
 2. Name: "Morph" is used by several software products; do you want a trademark check before the Store name reservation? (Reserve the Store name early; it's free.)
 3. Are the "Add BG" (screenshot framing) and "Edit" (adjustments) tools seen in `docs/reference/` in scope for 1.0? They aren't in the PRD.
-4. Toolchain: OK to require Visual Studio 2026 Build Tools with the C++ workload (for Morph.Shell) and the Windows SDK (makeappx/signtool)?
+4. Toolchain: OK to require Visual Studio 2026 Build Tools with the C++ workload (for Morph.Shell)? **Windows SDK answered (0.6):** no SDK install; makeappx/signtool come from the `Microsoft.Windows.SDK.BuildTools` NuGet package. C++ Build Tools: decide at 3.9.
 5. GitHub repo public or private? (CI minutes; FFmpeg/pack binaries are hosted on Releases.)
 6. ~~Wheel visual direction A or B~~ → **A**.
 7. Reference laptop for §7 targets (CPU/GPU), so the perf numbers mean something.
@@ -298,8 +299,8 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 **Risks**
 - R1 Drag wheel unreliable in some sources → fallback in §3, decided at the week-2 gate.
 - R2 Store policy on low-level keyboard hooks → hook only during drags, explain it in certification notes; fallback: hotkey + menu only.
-- R3 Install size: WPF self-contained runtime can't be trimmed; FFmpeg must be custom-built small. Measured in Phase 0.
-- R4 Idle RAM ≤ 80 MB with WPF: windows created lazily except the wheel; Worker process exits after each job. Measured in Phase 0.
+- R3 Install size: WPF self-contained runtime can't be trimmed; FFmpeg must be custom-built small. **Measured (0.6, Release R2R, BtbN static FFmpeg):** MSIX 196.5 MB download, 476 MB installed (budgets 120/300). Biggest: ffmpeg.exe 126 MB + ffprobe.exe 126 MB (each statically links every codec), `Microsoft.Windows.SDK.NET.dll` 55 MB (the full WinRT projection the `-windows10.0.22621` TFM pulls in), Magick.Native 24 MB. Levers: custom FFmpeg build with shared libs and only our codecs (~40 MB for both), trimming the WinRT projection to the types we use, then re-measure.
+- R4 Idle RAM ≤ 80 MB with WPF: windows created lazily except the wheel; Worker process exits after each job. **Measured (0.6, packaged, 30 s after launch):** 53.6 MB private, 109 MB working set. PRD §7 doesn't name the metric; private bytes meet it, working set doesn't (it includes shared WPF/DirectX pages). The placeholder MainWindow is still created; the tray app (Phase 1) removes it.
 - R5 Magick.NET's native DLL statically includes LGPL libde265 (HEIC decode). Check whether shipping it as a separate DLL satisfies "replaceable"; else decode HEIC via WIC (needs the free HEIF extension) instead.
 - R6 CI runners may lack Media Foundation H.264 → install the feature in CI; golden tests skip HW encoders.
 - R7 PDF→DOCX/XLSX quality is heuristic → labelled beta (CV-5).
