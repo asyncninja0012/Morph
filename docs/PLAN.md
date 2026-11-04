@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.4.** 1.1–1.3 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.5.** 1.1–1.4 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -90,7 +90,7 @@ public interface ICapabilityMatrix
 public sealed record WheelOption(ToolDescriptor Tool, string? DisabledReason, Uri? FixLink);
 ```
 
-**As built (1.2):** `Morph.Core.Capabilities`. `capabilities.json` holds `tools` (wheel order), `requirements` (id → reason + fix link) and `rows`; unknown fields and undeclared tool/requirement ids fail at load. Fields are added when a task needs them: `ToolDescriptor` is `(Id, Label, Glyph, Hint, Wheel)` for now (Kind, OutputSuffix, SubChoices, CountsTowardTrial come with tools/trial), `CapabilityRow` has no `Defaults`/`Install` yet (1.4 parameters, packs), `WheelOption` carries `Beta`. A conversion treats files already in the target format as fitting (JPG + PNG still offers PNG; those files are skipped). The wheel looks formats up **by extension** (`FileFormat.FromExtension`): it opens on DragEnter where no I/O is allowed, and virtual files only have names; the Worker sniffs and refuses mismatches.
+**As built (1.2):** `Morph.Core.Capabilities`. `capabilities.json` holds `tools` (wheel order), `requirements` (id → reason + fix link) and `rows`; unknown fields and undeclared tool/requirement ids fail at load. Fields are added when a task needs them: `ToolDescriptor` is `(Id, Label, Glyph, Hint, Wheel)` for now (Kind, OutputSuffix, SubChoices, CountsTowardTrial come with tools/trial), `CapabilityRow` has no `Install` yet (packs); defaults live on the tool, not the row (1.4: CV-4 defaults are per output format, and one job can mix input formats), `WheelOption` carries `Beta`. A conversion treats files already in the target format as fitting (JPG + PNG still offers PNG; those files are skipped). The wheel looks formats up **by extension** (`FileFormat.FromExtension`): it opens on DragEnter where no I/O is allowed, and virtual files only have names; the Worker sniffs and refuses mismatches.
 
 ```csharp
 
@@ -141,7 +141,7 @@ public interface IEditor        // in Morph.Editors; never touches files
 }
 ```
 
-App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` JSON line on stdin and writes `WorkerMessage` JSON lines on stdout: `{"Progress":{"Fraction":0.42,"Stage":"encoding"}}` … `{"Result":{…}}`. Serialisation via `System.Text.Json` source-gen. **Cancellation (0.5):** the App closes the Worker's stdin; the Worker kills ffmpeg, deletes its temp files and reports `Cancelled`. If it hasn't exited after 3 s, the App closes the Job Object handle, which kills the Worker and any ffmpeg/LibreOffice children (temp files may then remain). Closing the handle alone would always leave temp files, because a killed Worker can't clean up.
+App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` JSON line on stdin and writes `WorkerMessage` JSON lines on stdout: `{"Progress":{"Fraction":0.42,"Stage":"encoding"}}` … `{"Result":{…}}`. Serialisation via `System.Text.Json` source-gen. **Cancellation (0.5):** the App closes the Worker's stdin; the Worker kills ffmpeg, deletes its temp files and reports `Cancelled`. If it hasn't exited after 3 s, the App closes the Job Object handle, which kills the Worker and any ffmpeg/LibreOffice children (temp files may then remain). Closing the handle alone would always leave temp files, because a killed Worker can't clean up. **1.4:** `JobRequest.Parameters` carries the tool's `defaults` from `capabilities.json` (settings and editor output merge in later); the Worker fails a job up front, with a plain message, if an input was moved/deleted or the output folder is gone. `WorkerProtocolTests` drive the real `Morph.Worker.exe` through `WorkerClient`.
 
 ## 3. The drag wheel (Phase 0 spike, highest risk)
 
