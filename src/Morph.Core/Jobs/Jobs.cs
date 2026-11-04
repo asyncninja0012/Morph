@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Morph.Core.Jobs;
@@ -5,7 +6,9 @@ namespace Morph.Core.Jobs;
 /// <summary>One unit of work for <c>Morph.Worker</c> (PLAN §2). Output goes to <paramref name="OutputDirectory"/>.</summary>
 /// <param name="Engine">Engine id, e.g. "imaging".</param>
 /// <param name="ToolId">e.g. "convert.png".</param>
-public sealed record JobRequest(Guid Id, string ToolId, string Engine, IReadOnlyList<string> Inputs, string OutputDirectory);
+/// <param name="Parameters">Tool defaults (CV-4), later merged with quality settings and editor output; engines read what they know.</param>
+public sealed record JobRequest(Guid Id, string ToolId, string Engine, IReadOnlyList<string> Inputs, string OutputDirectory,
+    JsonObject? Parameters = null);
 
 /// <param name="Fraction">0..1; NaN = indeterminate.</param>
 public sealed record JobProgress(double Fraction, string? Stage);

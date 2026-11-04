@@ -69,6 +69,11 @@ public sealed class ImagingEngine : IEngine
                 image.Alpha(AlphaOption.Remove);
             }
 
+            if (job.Parameters?["quality"]?.GetValue<int>() is int quality)
+            {
+                image.Quality = (uint)Math.Clamp(quality, 1, 100); // lossy outputs only: PNG reads it as zlib level + filter
+            }
+
             var pending = namer.Reserve(input, "." + target);
             await using (var output = new FileStream(pending.TempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {

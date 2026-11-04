@@ -1,7 +1,7 @@
 {
   "tools": [
     {"id": "convert.png", "label": "PNG", "glyph": "\ue91b", "hint": "Convert to PNG", "wheel": "Convert"},
-    {"id": "convert.jpg", "label": "JPG", "glyph": "\ue91b", "hint": "Convert to JPG", "wheel": "Convert"},
+    {"id": "convert.jpg", "label": "JPG", "glyph": "\ue91b", "hint": "Convert to JPG", "wheel": "Convert", "defaults": {"quality": 90}},
     {"id": "convert.webp", "label": "WebP", "glyph": "\ue91b", "hint": "Convert to WebP", "wheel": "Convert"},
     {"id": "convert.mp4", "label": "MP4", "glyph": "\ue714", "hint": "Convert to MP4", "wheel": "Convert"},
     {"id": "convert.gif", "label": "GIF", "glyph": "\ue714", "hint": "Convert to GIF", "wheel": "Convert"},

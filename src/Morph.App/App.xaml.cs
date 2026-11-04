@@ -98,7 +98,8 @@ public sealed partial class App : Application
             .Where(f => f.Row is not null)
             .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!)))
         {
-            Jobs.Enqueue(new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder));
+            Jobs.Enqueue(new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
+                Matrix.Tool(item.Id)?.Defaults?.DeepClone().AsObject()));
         }
     }
 

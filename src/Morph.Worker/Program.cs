@@ -39,6 +39,16 @@ try
 {
     var engine = engines.FirstOrDefault(e => e.Id == request.Engine)
         ?? throw new EngineException("This tool isn't available.", $"unknown engine {request.Engine}");
+    if (request.Inputs.FirstOrDefault(i => !File.Exists(i)) is { } missing)
+    {
+        throw new EngineException($"{Path.GetFileName(missing)} was moved or deleted.", missing);
+    }
+
+    if (!Directory.Exists(request.OutputDirectory))
+    {
+        throw new EngineException("The folder for the result no longer exists.", request.OutputDirectory);
+    }
+
     await engine.RunAsync(request, namer, new SyncProgress<JobProgress>(p => Write(new WorkerMessage(Progress: p))), cts.Token);
     cts.Token.ThrowIfCancellationRequested();
     result = new JobResult(request.Id, JobStatus.Succeeded, namer.CommitAll(), null, null, Stopwatch.GetElapsedTime(started));

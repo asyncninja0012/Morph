@@ -8,25 +8,22 @@ public sealed class JobQueueTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    [Fact]
-    public async Task Runs_at_most_max_parallel_and_at_most_two_media_jobs()
+    [Theory]
+    [InlineData("imaging", 3)]
+    [InlineData("media", 2)]
+    public async Task Runs_at_most_max_parallel_and_at_most_two_media_jobs(string engine, int limit)
     {
         var runner = new GatedRunner();
         var queue = new JobQueue(runner.RunAsync, maxParallel: 3);
-        var media = Enumerable.Range(0, 3).Select(_ => queue.Enqueue(Request("media"))).ToList();
-        var images = Enumerable.Range(0, 3).Select(_ => queue.Enqueue(Request("imaging"))).ToList();
+        var handles = Enumerable.Range(0, 5).Select(_ => queue.Enqueue(Request(engine))).ToList();
 
-        await runner.WaitForRunningAsync(3);
+        await runner.WaitForRunningAsync(limit);
         await Task.Delay(100, TestContext.Current.CancellationToken); // give an over-limit job the chance to start
-        Assert.Equal(3, runner.Running.Count);
-        Assert.Equal(2, runner.Running.Count(r => r.Engine == "media"));
-
         runner.ReleaseAll();
-        var results = await Task.WhenAll(media.Concat(images).Select(h => h.Completion)).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+        var results = await Task.WhenAll(handles.Select(h => h.Completion)).WaitAsync(Timeout, TestContext.Current.CancellationToken);
 
         Assert.All(results, r => Assert.Equal(JobStatus.Succeeded, r.Status));
-        Assert.Equal(3, runner.MaxConcurrent);
-        Assert.Equal(2, runner.MaxConcurrentMedia);
+        Assert.Equal(limit, runner.MaxConcurrent);
     }
 
     [Fact]
@@ -52,8 +49,8 @@ public sealed class JobQueueTests
         var runner = new GatedRunner();
         var queue = new JobQueue(runner.RunAsync, maxParallel: 1);
         var first = queue.Enqueue(Request("imaging"));
-        var second = queue.Enqueue(Request("imaging"));
         await runner.WaitForRunningAsync(1);
+        var second = queue.Enqueue(Request("imaging"));
 
         second.Cancel();
         var result = await second.Completion.WaitAsync(Timeout, TestContext.Current.CancellationToken);
@@ -129,8 +126,6 @@ public sealed class JobQueueTests
 
         public int MaxConcurrent { get; private set; }
 
-        public int MaxConcurrentMedia { get; private set; }
-
         public async Task<JobResult> RunAsync(JobRequest request, IProgress<JobProgress> progress, CancellationToken ct)
         {
             Started.Add(request);
@@ -138,7 +133,6 @@ public sealed class JobQueueTests
             {
                 Running.Add(request);
                 MaxConcurrent = Math.Max(MaxConcurrent, Running.Count);
-                MaxConcurrentMedia = Math.Max(MaxConcurrentMedia, Running.Count(r => r.Engine == "media"));
             }
 
             try

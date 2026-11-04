@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 using Morph.Core.Formats;
@@ -9,7 +10,8 @@ public enum WheelGroup { Convert, Tools, Actions }
 
 /// <summary>One wedge's identity. <paramref name="Glyph"/> is a Segoe Fluent Icons character; <paramref name="Hint"/> the hover text.</summary>
 /// <param name="Id">"convert.png", "compress", "action.copy-path".</param>
-public sealed record ToolDescriptor(string Id, string Label, string Glyph, string Hint, WheelGroup Wheel);
+/// <param name="Defaults">Engine parameters used unless settings say otherwise (CV-4), e.g. { "quality": 90 }. Per tool, so per output format.</param>
+public sealed record ToolDescriptor(string Id, string Label, string Glyph, string Hint, WheelGroup Wheel, JsonObject? Defaults = null);
 
 /// <summary>One row of <c>capabilities.json</c> (CV-3): this input format can run this tool with this engine.</summary>
 /// <param name="Out">Output format id for conversions; null for tools that keep the format.</param>
@@ -105,6 +107,8 @@ public sealed class CapabilityMatrix
 
         return options;
     }
+
+    public ToolDescriptor? Tool(string id) => _tools.FirstOrDefault(t => t.Id == id);
 
     /// <summary>The row that handles <paramref name="file"/> for <paramref name="toolId"/>; null if none does.</summary>
     public CapabilityRow? RowFor(FileFormat file, string toolId) => _rows.GetValueOrDefault((file.Id, toolId));
