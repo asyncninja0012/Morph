@@ -10,11 +10,14 @@ using Morph.Overlay.Input;
 namespace Morph.Overlay.Wheel;
 
 /// <summary>
-/// Tap during a drag → show invisible drop catchers → if an OLE file drag enters them within the probe window,
-/// show the wheel at the cursor (PLAN §3). Lives on the UI thread; create it there.
+/// Modifier pressed during a drag → show invisible drop catchers at once (the probe runs during the hold) →
+/// once the key has been held for <see cref="HoldDelay"/> and an OLE file drag has entered the catchers, show the wheel
+/// at the cursor. Releasing the key closes it (PLAN §3, IX-1/IX-4). Lives on the UI thread; create it there.
 /// </summary>
 public sealed class DragWheelController : IDisposable
 {
+    /// <summary>A press shorter than this is a tap and never opens the wheel.</summary>
+    public static readonly TimeSpan HoldDelay = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(250); // cold first use measured ~160 ms; an invisible catcher lingering longer is harmless
     private static readonly TimeSpan DropGrace = TimeSpan.FromSeconds(2);
     private const string VirtualFilesFormat = "FileGroupDescriptorW";
@@ -25,13 +28,16 @@ public sealed class DragWheelController : IDisposable
     private readonly WheelWindow _wheel = new();
     private readonly List<DropCatcherWindow> _catchers = [];
     private readonly DispatcherTimer _probeTimer;
+    private readonly DispatcherTimer _holdTimer;
     private readonly DispatcherTimer _dropGraceTimer;
 
     private State _state = State.Idle;
     private bool _dragging;
     private int _oleDragsInside; // OLE calls DragLeave on the old target before DragEnter on the new one, so this stays 0 or 1
     private ModifierKey _group;
-    private long _tapTimestamp;
+    private long _pressTimestamp;
+    private bool _holdElapsed;
+    private bool _fileDragConfirmed;
     private IReadOnlyList<string> _files = [];
     private bool _dark = IsDarkMode();
 
@@ -40,6 +46,7 @@ public sealed class DragWheelController : IDisposable
         _detector = detector;
         _itemsFor = itemsFor;
         _probeTimer = new DispatcherTimer(ProbeTimeout, DispatcherPriority.Normal, (_, _) => OnProbeTimeout(), _dispatcher) { IsEnabled = false };
+        _holdTimer = new DispatcherTimer(HoldDelay, DispatcherPriority.Normal, (_, _) => OnHoldElapsed(), _dispatcher) { IsEnabled = false };
         _dropGraceTimer = new DispatcherTimer(DropGrace, DispatcherPriority.Normal, (_, _) => Hide("drop grace expired"), _dispatcher) { IsEnabled = false };
 
         _wheel.DragEnter += OnWheelDragOver;
@@ -64,6 +71,7 @@ public sealed class DragWheelController : IDisposable
         _detector.GestureDetected -= OnGesture;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _probeTimer.Stop();
+        _holdTimer.Stop();
         _dropGraceTimer.Stop();
         _wheel.Close();
         _catchers.ForEach(c => c.Dispose());
@@ -100,18 +108,18 @@ public sealed class DragWheelController : IDisposable
                 _dragging = true;
                 break;
 
-            case DragGestureKind.ModifierTapped when _dragging && g.Key is { } key:
+            case DragGestureKind.ModifierPressed when _dragging && _state == State.Idle && g.Key is { } key:
                 _group = key;
-                _tapTimestamp = g.Timestamp;
-                if (_state == State.Idle)
-                {
-                    ShowCatchers();
-                }
-                else if (_state == State.WheelOpen)
-                {
-                    ShowWheel(); // another modifier switches wheels (IX-1)
-                }
+                _pressTimestamp = g.Timestamp;
+                _holdElapsed = false;
+                _fileDragConfirmed = false;
+                _holdTimer.Start();
+                ShowCatchers();
+                break;
 
+            // Once the button is up a drop may still be in flight; Drop/DragLeave or the grace timer hide instead.
+            case DragGestureKind.ModifierReleased when _dragging && _state != State.Idle && g.Key == _group:
+                Hide(_state == State.WheelOpen ? "key released: wheel closed, drag continues" : "key released before the hold delay");
                 break;
 
             case DragGestureKind.EscapePressed when _state != State.Idle:
@@ -153,7 +161,7 @@ public sealed class DragWheelController : IDisposable
         _state = State.Probing;
         _detector.SuppressEscape = true;
         _probeTimer.Start();
-        Diagnostic?.Invoke($"probe: catchers up on {monitors.Count} monitor(s) {Elapsed()} after tap");
+        Diagnostic?.Invoke($"probe: catchers up on {monitors.Count} monitor(s) {Elapsed()} after press");
     }
 
     private void EnsureCatchers(int count)
@@ -169,10 +177,20 @@ public sealed class DragWheelController : IDisposable
         }
     }
 
+    private void OnHoldElapsed()
+    {
+        _holdTimer.Stop();
+        _holdElapsed = true;
+        if (_state == State.Probing && _fileDragConfirmed)
+        {
+            ShowWheel();
+        }
+    }
+
     private void OnProbeTimeout()
     {
         _probeTimer.Stop();
-        if (_state == State.Probing)
+        if (_state == State.Probing && !_fileDragConfirmed)
         {
             Hide("probe: no DragEnter (not an OLE drag, or OLE did not retarget)");
         }
@@ -183,7 +201,7 @@ public sealed class DragWheelController : IDisposable
         _oleDragsInside++;
         e.Effects = DragDropEffects.None;
         e.Handled = true;
-        if (_state != State.Probing)
+        if (_state != State.Probing || _fileDragConfirmed)
         {
             return;
         }
@@ -196,8 +214,12 @@ public sealed class DragWheelController : IDisposable
         }
 
         _files = files;
-        Diagnostic?.Invoke($"probe: file DragEnter {Elapsed()} after tap ({files.Count} path(s))");
-        ShowWheel();
+        _fileDragConfirmed = true;
+        Diagnostic?.Invoke($"probe: file DragEnter {Elapsed()} after press ({files.Count} path(s))");
+        if (_holdElapsed)
+        {
+            ShowWheel();
+        }
     }
 
     // Outside the wheel: show the "no" cursor; a release here cancels (IX-4).
@@ -267,12 +289,13 @@ public sealed class DragWheelController : IDisposable
         _wheel.SetContent(items, count, caption, _dark);
         _wheel.ShowAt(NativeWindows.CursorPosition());
         _state = State.WheelOpen;
-        Diagnostic?.Invoke($"wheel: {_group} shown {Elapsed()} after tap");
+        Diagnostic?.Invoke($"wheel: {_group} shown {Elapsed()} after press");
     }
 
     private void Hide(string reason)
     {
         _probeTimer.Stop();
+        _holdTimer.Stop();
         _dropGraceTimer.Stop();
         _detector.SuppressEscape = false;
         if (_state == State.Idle)
@@ -287,7 +310,7 @@ public sealed class DragWheelController : IDisposable
         Diagnostic?.Invoke($"hidden: {reason}");
     }
 
-    private string Elapsed() => $"{Stopwatch.GetElapsedTime(_tapTimestamp).TotalMilliseconds:F0} ms";
+    private string Elapsed() => $"{Stopwatch.GetElapsedTime(_pressTimestamp).TotalMilliseconds:F0} ms";
 
     private static IReadOnlyList<string>? FilesIn(IDataObject data)
     {

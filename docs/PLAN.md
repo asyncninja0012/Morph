@@ -144,27 +144,28 @@ App ↔ Worker protocol: `Morph.Worker.exe` receives one `JobRequest` as JSON on
 **Detecting a candidate drag (D1).**
 1. Raw input `RegisterRawInputDevices(mouse, RIDEV_INPUTSINK)` on the input thread: on left button down, record point + time; on movement, compare to `GetSystemMetrics(SM_CXDRAG/SM_CYDRAG)`.
 2. Past the threshold with the button still down → **candidate drag**: install `WH_KEYBOARD_LL` on the same thread. Button up → uninstall. The hook exists only during drags.
-3. The hook callback only records "Shift/Ctrl/Alt pressed and released alone within 400 ms" and posts a message. It returns within microseconds and never blocks (Windows silently removes slow LL hooks).
+3. The hook callback only records "Shift/Ctrl/Alt went down on its own" and "that hold ended" (key up, or any other key pressed) and posts a message. Auto-repeat is ignored. **Changed after 0.3 testing:** the wheel is press-and-hold, not tap: a press shorter than 200 ms does nothing, releasing the key closes the wheel. It returns within microseconds and never blocks (Windows silently removes slow LL hooks).
 4. False-positive filter: ignore if the foreground window is ours; ignore if `GetCursorInfo` shows the cursor is hidden (games). Text selections and window moves are rejected in step 5, not guessed at here.
 
-**Confirming it is a file drag (probe).** On a key tap, the App shows the **drop catchers**: one per monitor, borderless, `WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, constant alpha 1/255 via `SetLayeredWindowAttributes` (invisible, hardware-composited, still hit-testable), registered with `RegisterDragDrop` through WPF `AllowDrop`.
+**Confirming it is a file drag (probe).** As soon as the key goes down (not after the 200 ms hold), the App shows the **drop catchers**, so the probe runs during the hold: one per monitor, borderless, `WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, constant alpha 1/255 via `SetLayeredWindowAttributes` (invisible, hardware-composited, still hit-testable), registered with `RegisterDragDrop` through WPF `AllowDrop`.
 - If `DragEnter` arrives within ~150 ms with `CF_HDROP` (or `FileGroupDescriptorW`, D3), it's a file drag → show the wheel.
 - If no `DragEnter` arrives, it was a text selection or window move → hide the catchers silently.
 - **Spike question:** does OLE's `DoDragDrop` loop re-run target detection on a key-state change, or only on mouse move? If only on mouse move, nudge with a 0-distance `SendInput` mouse move after showing the catchers.
   **Answer (0.3):** no nudge needed. With zero mouse movement after the tap, `DragEnter` reached the catcher 15–45 ms after it appeared (ole32 `DoDragDrop` source, Release build). Verified with a WinForms source process; still to confirm by hand with Explorer, desktop, Edge and Outlook.
 
-**The wheel window.** A separate WPF window, `AllowsTransparency=True` (per-pixel alpha), ~440×440 DIP, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, `ShowActivated=false`. Centred on the cursor and clamped to the monitor work area. The app is PerMonitorV2-aware (app.manifest). Position comes from `GetCursorPos` in physical pixels, converted per monitor DPI. Wedges are plain WPF `Path`s generated from the option count (6–8, plus an outer ring for sub-choices). Hit-testing during the drag uses `DragOver` coordinates, not mouse events (no mouse events arrive during an OLE drag).
+**The wheel window.** A separate WPF window, `AllowsTransparency=True` (per-pixel alpha), 264×264 DIP (240 DIP ring, design A at ~0.6× to match the reference size), `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, `ShowActivated=false`. Centred on the cursor and clamped to the monitor work area. The app is PerMonitorV2-aware (app.manifest). Position comes from `GetCursorPos` in physical pixels, converted per monitor DPI. Wedges are plain WPF `Path`s generated from the option count (6–8, plus an outer ring for sub-choices). Hit-testing during the drag uses `DragOver` coordinates, not mouse events (no mouse events arrive during an OLE drag).
 
 **Drop handling.** Effects are only ever `Copy` or `None`, so the source never moves or links. Over a wedge: `Copy`; a drop enqueues the job. Over the catcher or the wheel centre: `None` (shows the "no" cursor; releasing cancels, IX-4). `Esc` (seen by the hook) hides both windows; while they are up the hook **swallows Esc**, because otherwise the source's own `QueryContinueDrag` would cancel the drag. After the button is released the windows stay until OLE delivers `Drop`/`DragLeave` (2 s cap), so a drop is never retargeted to the window underneath.
 
 **Catcher implementation note (0.3):** WPF clears `WS_EX_LAYERED` in `WM_STYLECHANGING` on any non-per-pixel window (both `Window` and `HwndSource`), which turned the catcher into an opaque black screen. The catcher is a bare `HwndSource` with a hook that keeps the bit, plus `SetLayeredWindowAttributes(alpha 1)`.
 
-**Modifier keys.** By default the tap passes through to the source, so Explorer's badge flickers, which is harmless. Spike checks whether an Alt tap pops up a menu bar in Edge/Outlook after the drop; if it does, swallow only the Alt tap (return 1 from the hook).
+**Modifier keys.** The held key passes through to the source; over our windows the effect is forced to `Copy`/`None`, so it has no effect there. Still to check: whether an Alt press pops up a menu bar in Edge/Outlook after the drop; if it does, swallow only Alt (return 1 from the hook). Native modifier drags (Shift = move, Ctrl = copy, Alt = shortcut) still work when the key is pressed **before** the drag starts, because the hook is not installed yet; pressing and holding one mid-drag now opens the wheel instead (R8).
 
 **Reading files.** `DragEventArgs.Data.GetData(DataFormats.FileDrop)` → `string[]`. Virtual files: read `FileGroupDescriptorW` and copy each `FileContents` stream to `%TEMP%\Morph\in\<guid>\`, run the job on those, and write output to the user's Downloads folder (not next to a temp file).
 
 **Wheel ≤ 100 ms (IX-2):** the windows are created at startup and kept hidden. Show = `SetWindowPos(SWP_SHOWWINDOW | SWP_NOACTIVATE)` plus a 120 ms scale/opacity animation. The matrix lookup runs on `DragEnter` against a precomputed per-format table.
 **Measured (0.3, Release ReadyToRun, injected input):** tap → wheel visible 37–62 ms once warm. The first drag of a session takes ~170 ms; ~130 ms of it is waiting for the first cross-process OLE `DragEnter`, which the startup warm-up (all windows rendered once off-screen) cannot cover. Revisit in 5.1 if it shows on the reference laptop.
+**Measured after the hold change:** press → wheel visible ~225 ms (the 200 ms hold plus ~25 ms); the probe finishes inside the hold, so the cold first-use cost is mostly hidden.
 
 **Fallback if the spike fails** (exit criterion: 20/20 drags from Explorer, desktop, Edge downloads, and Outlook convert end to end): ship hotkey-first (IX-5: Explorer selection via `IShellWindows` → `IFolderView2::GetSelection`, desktop via `SWC_DESKTOP`) plus the right-click menu. The wheel UI is reused unchanged; only the trigger changes.
 
@@ -219,7 +220,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 - **Fixtures** generated by `build/gen-fixtures.cs` (.NET 10 file-based app): ffmpeg `lavfi testsrc2/sine` clips, Magick-drawn images with known shapes, PDFsharp-generated PDFs with known text, Open XML DOCX, CSV, SRT, ZIP. Nothing binary is checked in except a few tiny real-world samples (HEIC from a phone, Outlook-style `.msg` drag test).
 - **Golden tests** per capability row (auto-enumerated from `capabilities.json`, so a new row without a fixture fails): assert format by sniffing, dimensions, perceptual hash (dHash, Hamming ≤ 6) for images, ±1 frame duration and stream codecs (ffprobe) for media, page count + extracted text contains for PDF/docs, row/cell equality for sheets.
 - **Engine contract tests:** cancellation leaves no temp file and no child process; a corrupt input → `Failed` with a user message; output never equals the input path.
-- **FlaUI smoke:** a synthetic drag (`SendInput` from Explorer window to the cursor + key tap) → wheel visible within 100 ms → drop on PNG → output exists; each editor completes with keyboard only.
+- **FlaUI smoke:** a synthetic drag (`SendInput` from Explorer window to the cursor + held key) → wheel visible within 100 ms of the hold threshold → drop on PNG → output exists; each editor completes with keyboard only.
 
 ## 10. Dependencies (pin exact versions when first added)
 
@@ -260,7 +261,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 0.4 Read CF_HDROP + FileGroupDescriptor in DragEnter; drop on "PNG" → Worker → Magick JPG→PNG with temp+rename.
 0.5 ffmpeg.exe runner with `-progress` parsing, Job Object kill, encoder probe (MOV→MP4).
 0.6 `pack.ps1` + dev cert → MSIX installs and runs; `size-check.ps1` reports numbers; measure idle RAM.
-**Demo:** drag a JPG from Explorer, tap Shift, drop on PNG → `photo.png` appears; repeat from desktop, Edge downloads bar, Outlook attachment; Esc continues a normal drag; drop outside the wheel does nothing; Explorer never shows a move; MSIX installs non-elevated; report wheel latency and idle RAM.
+**Demo:** drag a JPG from Explorer, hold Shift, drop on PNG → `photo.png` appears; repeat from desktop, Edge downloads bar, Outlook attachment; Esc continues a normal drag; drop outside the wheel does nothing; Explorer never shows a move; MSIX installs non-elevated; report wheel latency and idle RAM.
 
 ### Phase 1 — Core pipeline + media/image conversions (wk 3–5) · CV-1/2/3/4/6, JB-1..4, IX-3
 1.1 FileSniffer + tests. 1.2 capabilities.json + matrix (intersection, disabled reasons). 1.3 OutputNamer + JobQueue (parallel limits, cancel). 1.4 Worker protocol + engine host. 1.5 Imaging conversions + HEIC/WIC detection. 1.6 Video/audio conversions + GIF palette pipeline. 1.7 Toasts (progress, cancel, show in folder). 1.8 Fixture generator + golden-test harness.
@@ -301,3 +302,4 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 - R5 Magick.NET's native DLL statically includes LGPL libde265 (HEIC decode). Check whether shipping it as a separate DLL satisfies "replaceable"; else decode HEIC via WIC (needs the free HEIF extension) instead.
 - R6 CI runners may lack Media Foundation H.264 → install the feature in CI; golden tests skip HW encoders.
 - R7 PDF→DOCX/XLSX quality is heuristic → labelled beta (CV-5).
+- R8 Press-and-hold mid-drag overrides Explorer's native mid-drag Shift/Ctrl/Alt (move/copy/shortcut). Pressing the key before starting the drag still works natively. Key remapping (IX-1) is the escape hatch.

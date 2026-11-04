@@ -1,7 +1,7 @@
 Windows file-tools app — project map, PRD & build plan
 4 Nov 2026 · @pushkal
 What we're building
-A Windows desktop utility that converts, edits and acts on files the moment you drag them, entirely offline. You start dragging a file in Explorer or on the desktop, tap a key, and a radial wheel opens at the cursor. Drop on a wedge and the job runs. Tools that need no input run instantly and drop a new file next to the original. Tools that need your hands (crop, annotate, trim) open a small single-purpose editor inside the app, never Windows Photos.
+A Windows desktop utility that converts, edits and acts on files the moment you drag them, entirely offline. You start dragging a file in Explorer or on the desktop, hold a key, and a radial wheel opens at the cursor. Drop on a wedge and the job runs. Tools that need no input run instantly and drop a new file next to the original. Tools that need your hands (crop, annotate, trim) open a small single-purpose editor inside the app, never Windows Photos.
 Working name in this doc: Pith (placeholder, rename freely).
 Reference product. Tangerine for Mac by Leap Studio, launched September 2026: 275 conversion options, 26 file tools, 6 file actions, everything local, $29.99 one-time after a 20-action trial. We match its scope on Windows except where the OS makes it impossible.
 In scope for Windows
@@ -16,7 +16,7 @@ Out of scope
 Dependency stance. Pragmatic, not purist. Use a mature open-source engine wherever writing our own would be painful (video, PDF rendering, image codecs, archives). Write our own code only where it is small and simple (subtitles, CSV, the document hub, glue). Keep the core install light by bundling only compact engines and downloading the two heavy ones (the office engine and the background-removal model) on first use.
 How it works end to end
 Every tool, instant or interactive, ends as the same thing: a set of parameters handed to one engine job. Editors are just a way of collecting parameters, so the processing pipeline is shared by all 300-odd operations.
-The drag hook watches for a left-button drag, a key tap opens the wheel, and the drop hands file paths to the registry. Adding a conversion means adding one row to a capability table, not new UI.
+The drag hook watches for a left-button drag, holding a key opens the wheel, and the drop hands file paths to the registry. Adding a conversion means adding one row to a capability table, not new UI.
 Tech stack and why
 C# on .NET 10 with WPF is the pick. It is the most reliable way on Windows to draw a transparent, always-on-top wheel that accepts drops from Explorer, and it calls Win32 and Windows Runtime APIs with little friction.
 Layer
@@ -220,12 +220,12 @@ File actions (Control wheel, never count against the trial): Float shelf, Copy t
 UI/UX
 The rule: one gesture for anything that needs no input, one small focused window for anything that does. Nothing ever opens Windows Photos or another app.
 Entry points
-1. Drag wheel (primary). Start dragging any file, tap a key, drop on a wedge.
+1. Drag wheel (primary). Start dragging any file, hold a key, drop on a wedge.
 2. Right-click menu. "Pith ›" submenu in Explorer with Convert, Tools and Actions.
 3. Keyboard. Select files in Explorer, press a global hotkey (default Ctrl+Alt+Space), arrows to choose, Enter to run.
 4. Tray icon. Opens the Float shelf, recent jobs, settings and pause.
 Keys during a drag (all remappable)
-Key tapped mid-drag
+Key held mid-drag
 Wheel
 Note
 Shift
@@ -260,7 +260,7 @@ Editor windows (one per interactive tool)
 Float shelf
 A small always-on-top panel at a screen edge. Drop files onto it to park them, then drag them out to any app or folder later. It also accepts finished outputs, so a converted file can go straight into an email or chat window.
 Settings (single window, five tabs): General (launch at startup, output folder rule, overwrite), Keys, Wheel (pin and reorder options), Quality defaults per format, Packs (install or remove the office pack and background model, see disk use).
-Onboarding: a three-step interactive demo on first launch. The user drags a sample file, taps Shift, drops on PNG, sees the toast. No account, no email.
+Onboarding: a three-step interactive demo on first launch. The user drags a sample file, holds Shift, drops on PNG, sees the toast. No account, no email.
 Timeline
 About 18 weeks part-time to a public 1.0, with a useful alpha at week 9. Full-time, roughly halve every phase.
 Phase 0 is deliberately a throwaway spike: if the drag wheel can't be made reliable, the fallback is a right-click and hotkey-first product, and we learn that in two weeks rather than ten.
@@ -271,7 +271,7 @@ Why it bites
 Mitigation
 Detecting a drag that Explorer started
 Windows has no public "a drag is in progress" event
-Low-level mouse hook: button down + movement past the system drag threshold + cursor over Explorer, desktop or any window; confirm with key tap. Spike in week 1
+Low-level mouse hook: button down + movement past the system drag threshold + cursor over Explorer, desktop or any window; confirm with a held key. Spike in week 1
 Wheel stealing focus or failing to accept the drop
 A focused overlay cancels some drags; UIPI blocks drops across integrity levels
 Non-activating layered window registered as a drop target; app runs non-elevated like Explorer

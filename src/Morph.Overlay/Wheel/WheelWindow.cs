@@ -12,7 +12,7 @@ namespace Morph.Overlay.Wheel;
 /// <summary>The radial wheel, design A "Fluent ring" (docs/design/wheel-a-fluent-ring.svg). View only: no logic beyond drawing and hit-testing.</summary>
 internal sealed class WheelWindow : Window
 {
-    public const double SizeDip = 440;
+    public const double SizeDip = 264; // 240 ring + room for the shadow
     private static readonly Point Centre = new(SizeDip / 2, SizeDip / 2);
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
@@ -46,15 +46,15 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Clear();
 
         var p = _palette;
-        _canvas.Children.Add(Circle(WheelGeometry.DiscRadius, p.Disc, p.Stroke, new DropShadowEffect { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Opacity = 0.22 }));
+        _canvas.Children.Add(Circle(WheelGeometry.DiscRadius, p.Disc, p.Stroke, new DropShadowEffect { BlurRadius = 18, ShadowDepth = 5, Direction = 270, Opacity = 0.22 }));
 
         for (var i = 0; i < items.Count; i++)
         {
             var wedge = new Path { Data = WheelGeometry.Wedge(i, items.Count, Centre), StrokeThickness = 1 };
             var mid = i * 360.0 / items.Count;
             var anchor = WheelGeometry.PointAt(mid, WheelGeometry.ContentRadius);
-            var icon = Text(items[i].Glyph, 20, FontWeights.Normal, anchor + new Vector(0, -12), IconFont);
-            var label = Text(items[i].Label, 13, FontWeights.SemiBold, anchor + new Vector(0, 16));
+            var icon = Text(items[i].Glyph, 16, FontWeights.Normal, anchor + new Vector(0, -9), IconFont);
+            var label = Text(items[i].Label, 11, FontWeights.SemiBold, anchor + new Vector(0, 12));
             _canvas.Children.Add(wedge);
             _canvas.Children.Add(icon);
             _canvas.Children.Add(label);
@@ -63,9 +63,9 @@ internal sealed class WheelWindow : Window
         }
 
         _canvas.Children.Add(Circle(WheelGeometry.CentreRadius, p.CentreFill, p.Stroke));
-        var countText = Text(count, 26, FontWeights.SemiBold, new Point(0, -8));
+        var countText = Text(count, 18, FontWeights.SemiBold, new Point(0, -6));
         countText.Foreground = p.Label;
-        var captionText = Text(caption, 12, FontWeights.Normal, new Point(0, 18));
+        var captionText = Text(caption, 10, FontWeights.Normal, new Point(0, 12));
         captionText.Foreground = p.Icon;
         _canvas.Children.Add(countText);
         _canvas.Children.Add(captionText);

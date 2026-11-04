@@ -4,7 +4,7 @@ Pith is an offline Windows utility that converts, edits and acts on files from a
 Changing a file's format or doing a small edit on Windows means opening a heavy app (Photoshop, Premiere, Acrobat) or uploading the file to a website. Websites are slow, capped, ad-heavy and send private files to servers you don't control. Built-in tools (Photos, Paint, Clipchamp) each cover a sliver and none are reachable from the file itself.
 2. Goals and non-goals
 Goals
-1. Any supported conversion or quick edit takes one drag, one key tap and one drop, with no window to manage.
+1. Any supported conversion or quick edit takes one drag, one held key and one drop, with no window to manage.
 2. Everything runs locally. No account, no upload, no telemetry unless the user opts in.
 3. Tools that need input open a small single-purpose editor inside Pith, never another app.
 4. The core install stays under about 120 MB to download; heavy capabilities download on demand.
@@ -41,10 +41,10 @@ Keyboard path, no bloat
 • Third-party engines allowed when they save real effort; licences must be permissive or LGPL (no GPL or AGPL code linked into the app).
 6. Functional requirements
 6.1 Interaction model
-• IX-1 While the user drags one or more files from Explorer, the desktop or any app that drags file paths, tapping Shift opens the Convert wheel, Ctrl the Tools wheel, Alt the Actions wheel. Keys are remappable.
-• IX-2 The wheel opens centred on the cursor within 100 ms of the key tap, stays open until drop or Esc, and never takes focus from the source window.
+• IX-1 While the user drags one or more files from Explorer, the desktop or any app that drags file paths, pressing and holding Shift opens the Convert wheel, Ctrl the Tools wheel, Alt the Actions wheel. A quick tap (released within 200 ms) does nothing. Keys are remappable.
+• IX-2 The wheel opens centred on the cursor within 100 ms of the 200 ms hold threshold, stays open while the key is held until drop, release or Esc, and never takes focus from the source window.
 • IX-3 The wheel shows only options valid for every file in the drag. Options with sub-choices expand an outer ring on hover.
-• IX-4 Dropping outside a wedge cancels; Esc closes the wheel and the drag continues as a normal drag.
+• IX-4 Dropping outside a wedge cancels; releasing the key or pressing Esc without dropping closes the wheel and the drag continues as a normal drag.
 • IX-5 Keyboard path: with files selected in Explorer, a global hotkey (default Ctrl+Alt+Space) opens the same wheel at the cursor; arrows choose, Enter applies, Tab switches wheel.
 • IX-6 Right-click menu: a "Pith" submenu in Explorer with Convert, Tools and Actions, mirroring the wheel.
 • IX-7 Wheel ordering learns from use; users can pin and reorder options in Settings.
@@ -86,7 +86,7 @@ Keyboard path, no bloat
 6.8 Settings
 General (launch at sign-in, output location rule, overwrite per tool, language), Keys, Wheel (pin, hide, reorder), Quality defaults per format, Packs, About (licences, version, open logs folder).
 6.9 Onboarding
-First launch shows a three-step interactive demo using a bundled sample file: drag it, tap Shift, drop on PNG. Then one screen on the right-click menu and hotkey. Skippable; no sign-up.
+First launch shows a three-step interactive demo using a bundled sample file: drag it, hold Shift, drop on PNG. Then one screen on the right-click menu and hotkey. Skippable; no sign-up.
 6.10 Monetisation
 • Free trial of 25 conversion or tool actions, then a one-time Pro unlock. Actions never count.
 • Price is an open question (Tangerine charges $29.99 one-time).
@@ -95,7 +95,7 @@ First launch shows a three-step interactive demo using a bundled sample file: dr
 Area
 Requirement
 Responsiveness
-Wheel visible ≤ 100 ms after key tap; editor window visible ≤ 400 ms after drop
+Wheel visible ≤ 100 ms after the 200 ms hold threshold; editor window visible ≤ 400 ms after drop
 Speed
 12 MP JPG → PNG ≤ 1.5 s; 1-minute 1080p MOV → MP4 ≤ 20 s with a hardware encoder; 50-page PDF → JPGs ≤ 8 s (mid-range laptop)
 Footprint

@@ -9,13 +9,14 @@ namespace Morph.Overlay.Wheel;
 /// </summary>
 internal static class WheelGeometry
 {
-    public const double DiscRadius = 200;
-    public const double OuterRadius = 190;
-    public const double InnerRadius = 84;
-    public const double CentreRadius = 78;
+    // Design A proportions at ~0.6x the mockup, sized like the reference wheel (docs/reference/).
+    public const double DiscRadius = 120;
+    public const double OuterRadius = 114;
+    public const double InnerRadius = 50;
+    public const double CentreRadius = 46;
     public const double GapDegrees = 4;
     /// <summary>Icon and label sit stacked (icon above) around the point at this radius on the wedge's centre line.</summary>
-    public const double ContentRadius = 137;
+    public const double ContentRadius = 82;
 
     /// <returns>The wedge under the point, or null for the centre (cancel) and outside the disc.</returns>
     public static int? HitTest(double dx, double dy, int count)

@@ -11,7 +11,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace Morph.Overlay.Input;
 
 /// <summary>
-/// Watches for "file drag + modifier tap" on a dedicated input thread (PLAN §3, D1).
+/// Watches for "file drag + modifier held" on a dedicated input thread (PLAN §3, D1).
 /// Raw input (RIDEV_INPUTSINK) is always on and passive; WH_KEYBOARD_LL exists only during a candidate drag.
 /// <see cref="GestureDetected"/> is raised on the input thread: handlers must return quickly and marshal to UI themselves.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class DragGestureDetector : IDisposable
     private const ushort HidUsageMouse = 0x02;
     private const uint VkEscape = 0x1B;
 
-    private readonly ModifierTapTracker _taps = new();
+    private readonly ModifierHoldTracker _modifiers = new();
     private DragTracker? _drag;
     private Thread? _thread;
     private Dispatcher? _dispatcher;
@@ -189,7 +189,7 @@ public sealed class DragGestureDetector : IDisposable
             return;
         }
 
-        _taps.Reset();
+        _modifiers.Reset();
         _hookProc ??= KeyboardHookProc;
         _keyboardHook = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_KEYBOARD_LL, _hookProc, PInvoke.GetModuleHandle((string?)null), 0);
         if (_keyboardHook.IsInvalid)
@@ -230,9 +230,10 @@ public sealed class DragGestureDetector : IDisposable
                     }
                 }
 
-                if (_taps.OnKey(key->vkCode, isDown, key->time) is { } modifier)
+                if (_modifiers.OnKey(key->vkCode, isDown) is { } change)
                 {
-                    _dispatcher!.BeginInvoke(() => Raise(DragGestureKind.ModifierTapped, CursorPosition(), now, modifier));
+                    var kind = change.IsDown ? DragGestureKind.ModifierPressed : DragGestureKind.ModifierReleased;
+                    _dispatcher!.BeginInvoke(() => Raise(kind, CursorPosition(), now, change.Key));
                 }
             }
         }
