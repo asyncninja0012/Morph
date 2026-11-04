@@ -7,9 +7,8 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Morph.App.Toasts;
 
-/// <summary>What one toast shows. <paramref name="Fraction"/>: null hides the bar, NaN makes it indeterminate.</summary>
-public sealed record ToastView(string Glyph, string Title, string Message, double? Fraction,
-    bool CanCancel = false, bool CanShowFolder = false, bool CanCopyDetails = false);
+/// <summary>What one toast shows.</summary>
+public sealed record ToastView(string Glyph, string Title, string Message, bool CanShowFolder = false, bool CanCopyDetails = false);
 
 /// <summary>The bottom-right card (PLAN §6, JB-2). View only: <see cref="ToastHost"/> decides what it shows.</summary>
 public sealed partial class ToastWindow : Window
@@ -18,7 +17,6 @@ public sealed partial class ToastWindow : Window
     {
         InitializeComponent();
         CloseButton.Click += (_, _) => CloseClicked?.Invoke();
-        CancelButton.Click += (_, _) => CancelClicked?.Invoke();
         ShowFolderButton.Click += (_, _) => ShowFolderClicked?.Invoke();
         CopyDetailsButton.Click += (_, _) => CopyDetailsClicked?.Invoke();
 
@@ -31,8 +29,6 @@ public sealed partial class ToastWindow : Window
 
     public event Action? CloseClicked;
 
-    public event Action? CancelClicked;
-
     public event Action? ShowFolderClicked;
 
     public event Action? CopyDetailsClicked;
@@ -42,10 +38,6 @@ public sealed partial class ToastWindow : Window
         GlyphText.Text = view.Glyph;
         TitleText.Text = view.Title;
         MessageText.Text = view.Message;
-        Bar.Visibility = view.Fraction is null ? Visibility.Collapsed : Visibility.Visible;
-        Bar.IsIndeterminate = view.Fraction is double.NaN;
-        Bar.Value = view.Fraction is { } f && !double.IsNaN(f) ? f : 0;
-        CancelButton.Visibility = view.CanCancel ? Visibility.Visible : Visibility.Collapsed;
         ShowFolderButton.Visibility = view.CanShowFolder ? Visibility.Visible : Visibility.Collapsed;
         CopyDetailsButton.Visibility = view.CanCopyDetails ? Visibility.Visible : Visibility.Collapsed;
     }

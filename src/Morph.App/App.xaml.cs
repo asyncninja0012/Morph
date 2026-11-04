@@ -99,7 +99,7 @@ public sealed partial class App : Application
         }
 
         // Files already in the target format are skipped. Output goes next to each original; virtual files
-        // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder), one toast per drop.
+        // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
         var jobs = files.Paths
             .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
             .Where(f => f.Row is not null)
@@ -109,14 +109,11 @@ public sealed partial class App : Application
             .Select(r => (r, Jobs.Enqueue(r)))
             .ToList();
 
-        var title = files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files";
-        if (jobs.Count == 0)
+        // Every file already in the target format: nothing to do, and nothing to say.
+        if (jobs.Count > 0)
         {
-            _toasts?.Info(title, $"Already {item.Label}. Nothing to convert.");
-            return;
+            _toasts?.Track(jobs, files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files");
         }
-
-        _toasts?.Track(jobs, title, item.Label);
     }
 
     protected override void OnExit(ExitEventArgs e)

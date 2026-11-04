@@ -9,14 +9,12 @@ using Morph.Core.Jobs;
 namespace Morph.App.Toasts;
 
 /// <summary>
-/// One toast per drop (JB-2): progress and Cancel while running, then Show in folder, or the reason and Copy details.
+/// Shows a toast only when a drop fails (developer's call, overrides JB-2's progress/success toast): the plain reason,
+/// Copy details, and Show in folder when other files in the drop did convert. Success and cancel are silent.
 /// Toasts stack up from the bottom-right of the primary work area, newest at the bottom.
 /// </summary>
 public sealed class ToastHost
 {
-    private static readonly TimeSpan SuccessLinger = TimeSpan.FromSeconds(6);
-    private static readonly TimeSpan CancelledLinger = TimeSpan.FromSeconds(3);
-
     private readonly Dispatcher _dispatcher;
     private readonly List<ToastWindow> _windows = [];
     private readonly List<(JobGroup Group, Action Refresh)> _groups = [];
@@ -28,43 +26,26 @@ public sealed class ToastHost
     }
 
     /// <summary>Call on the UI thread right after enqueueing, before any update for these jobs is dispatched.</summary>
-    public void Track(IReadOnlyList<(JobRequest Request, JobHandle Handle)> jobs, string title, string target)
+    public void Track(IReadOnlyList<(JobRequest Request, JobHandle Handle)> jobs, string title)
     {
         var group = new JobGroup(jobs);
-        var window = Open();
-        window.CancelClicked += group.Cancel;
-        window.ShowFolderClicked += () => ShowInFolder(group.Outputs);
-        window.CopyDetailsClicked += () => CopyDetails(group.Details);
 
         void Refresh()
         {
-            window.Render(group.Status switch
+            if (group.Status is JobStatus.Running or JobStatus.Succeeded or JobStatus.Cancelled)
             {
-                JobStatus.Running => new ToastView("", title, $"Converting to {target}…", group.Fraction, CanCancel: true),
-                JobStatus.Succeeded => new ToastView("", title,
-                    group.Outputs is [var one] ? $"Saved {Path.GetFileName(one)}" : $"Saved {group.Outputs.Count} files", null, CanShowFolder: true),
-                JobStatus.Cancelled => new ToastView("", title, "Cancelled. Nothing was saved.", null),
-                _ => new ToastView("", title, group.UserMessage ?? "Morph couldn't finish this.", null,
-                    CanShowFolder: group.Outputs.Count > 0, CanCopyDetails: group.Details is not null),
-            });
-
-            if (group.Status is JobStatus.Succeeded or JobStatus.Cancelled)
-            {
-                CloseLater(window, group.Status == JobStatus.Succeeded ? SuccessLinger : CancelledLinger);
+                return;
             }
+
+            _groups.RemoveAll(g => g.Group == group);
+            var window = Open();
+            window.ShowFolderClicked += () => ShowInFolder(group.Outputs);
+            window.CopyDetailsClicked += () => CopyDetails(group.Details);
+            window.Render(new ToastView("", title, group.UserMessage ?? "Morph couldn't finish this.",
+                CanShowFolder: group.Outputs.Count > 0, CanCopyDetails: group.Details is not null));
         }
 
         _groups.Add((group, Refresh));
-        window.Closed += (_, _) => _groups.RemoveAll(g => g.Group == group); // closing hides the toast; the jobs keep running
-        Refresh();
-    }
-
-    /// <summary>A toast with nothing running, e.g. every dropped file was already in the target format.</summary>
-    public void Info(string title, string message)
-    {
-        var window = Open();
-        window.Render(new ToastView("", title, message, null));
-        CloseLater(window, CancelledLinger);
     }
 
     private void OnUpdate(JobUpdate update)
@@ -106,22 +87,6 @@ public sealed class ToastHost
             w.Top = bottom - height;
             bottom -= height - 12; // cards overlap their transparent shadow margins
         }
-    }
-
-    // Stays while the pointer is over it, so a toast never vanishes under the user's hand.
-    private static void CloseLater(ToastWindow window, TimeSpan after)
-    {
-        var timer = new DispatcherTimer { Interval = after };
-        timer.Tick += (_, _) =>
-        {
-            if (!window.IsMouseOver)
-            {
-                timer.Stop();
-                window.Close();
-            }
-        };
-        window.Closed += (_, _) => timer.Stop();
-        timer.Start();
     }
 
     // shortcut: selects the first output only; SHOpenFolderAndSelectItems can select them all if batches need it.

@@ -21,7 +21,6 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock x:Name="GlyphText" Grid.RowSpan="2" Margin="0,2,12,0" FontSize="20" VerticalAlignment="Top"
@@ -33,11 +32,9 @@
                     Content="&#xE8BB;" ToolTip="Close" AutomationProperties.Name="Close" />
             <TextBlock x:Name="MessageText" Grid.Row="1" Grid.Column="1" Margin="0,2,0,0" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            <ProgressBar x:Name="Bar" Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Minimum="0" Maximum="1" />
-            <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,6,0">
+            <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,6,0">
                 <Button x:Name="CopyDetailsButton" Content="Copy details" Margin="0,0,8,0" />
-                <Button x:Name="ShowFolderButton" Content="Show in folder" Style="{DynamicResource AccentButtonStyle}" Margin="0,0,8,0" />
-                <Button x:Name="CancelButton" Content="Cancel" />
+                <Button x:Name="ShowFolderButton" Content="Show in folder" />
             </StackPanel>
         </Grid>
     </Border>
