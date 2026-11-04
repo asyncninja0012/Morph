@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase 0 (spikes) complete: drag wheel, image and video conversion in a sandboxed worker, MSIX packaging.
+
 ### Added
 - Repo skeleton (task 0.1): `Morph.slnx`, `Directory.Build.props` (net10.0-windows10.0.22621.0, C# 14, nullable, warnings as errors, x64), central package versions, `global.json` (SDK 10.0.403, Microsoft.Testing.Platform runner), `.editorconfig`.
 - Projects: `Morph.Core`, `Morph.Engines`, `Morph.Worker`, `Morph.Overlay`, `Morph.App` (placeholder window), `Morph.Core.Tests`, `Morph.Engines.Tests` (xunit.v3 dependency-rule tests).
