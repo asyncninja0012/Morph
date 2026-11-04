@@ -1,5 +1,6 @@
 using System.Diagnostics;
 
+using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Engines.Media;
 
@@ -48,6 +49,56 @@ public sealed class MediaEngineTests : IDisposable
         TestContext.Current.TestOutputHelper?.WriteLine($"encoder: {encoder.Name}");
     }
 
+    [Theory]
+    [InlineData("clip.mkv", "webm", "vp9,opus")]
+    [InlineData("clip.avi", "mp4", "h264,aac")]
+    [InlineData("clip.webm", "gif", "gif")]
+    [InlineData("clip.mp4", "mp3", "mp3")]
+    [InlineData("tone.wav", "mp3", "mp3")]
+    [InlineData("tone.mp3", "m4a", "aac")]
+    [InlineData("tone.m4a", "wav", "pcm_s16le")]
+    [InlineData("tone.wav", "flac", "flac")]
+    [InlineData("tone.flac", "ogg", "vorbis")]
+    [InlineData("tone.ogg", "opus", "opus")]
+    [InlineData("tone.opus", "wav", "pcm_s16le")]
+    public async Task Converts_to_the_target_codecs_with_the_same_duration(string name, string target, string codecs)
+    {
+        if (target == "mp4")
+        {
+            await RequireEncoderAsync();
+        }
+        else
+        {
+            Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        }
+
+        var input = await MakeAsync(name, seconds: 1);
+        var namer = new OutputNamer(_dir);
+
+        await Engine().RunAsync(Job(input, target), namer, new SyncProgress<JobProgress>(_ => { }), TestContext.Current.CancellationToken);
+        var output = Assert.Single(namer.CommitAll());
+
+        Assert.Equal(target, (await FileSniffer.Instance.DetectAsync(output, TestContext.Current.CancellationToken)).Id);
+        var (_, streams, _) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath,
+            ["-v", "error", "-show_entries", "stream=codec_name,duration", "-show_entries", "format=duration", "-of", "csv=p=0", output],
+            null, TestContext.Current.CancellationToken);
+        var lines = streams.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(codecs.Split(','), lines[..^1].Select(l => l.Split(',')[0]));
+        Assert.InRange(double.Parse(lines[^1], System.Globalization.CultureInfo.InvariantCulture), 0.85, 1.15);
+    }
+
+    [Fact]
+    public async Task Audio_to_video_fails_with_a_user_message()
+    {
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var input = await MakeAsync("tone.wav", seconds: 1);
+
+        var ex = await Assert.ThrowsAsync<EngineException>(() =>
+            Engine().RunAsync(Job(input, "gif"), new OutputNamer(_dir), new SyncProgress<JobProgress>(_ => { }), TestContext.Current.CancellationToken));
+
+        Assert.Contains("tone.wav", ex.UserMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Cancel_kills_ffmpeg_and_leaves_no_temp_file()
     {
@@ -79,7 +130,7 @@ public sealed class MediaEngineTests : IDisposable
 
     private MediaEngine Engine() => new(_ffmpeg, new EncoderProbe(_ffmpeg, Path.Combine(_dir, "..", "morph-test-encoder-cache")));
 
-    private JobRequest Job(string input) => new(Guid.NewGuid(), "convert.mp4", "media", [input], _dir);
+    private JobRequest Job(string input, string target = "mp4") => new(Guid.NewGuid(), $"convert.{target}", "media", [input], _dir);
 
     private async Task<VideoEncoder> RequireEncoderAsync()
     {
@@ -99,6 +150,31 @@ public sealed class MediaEngineTests : IDisposable
             "-f", "lavfi", "-i", $"testsrc2=d={seconds}:s=640x360:r=25", "-f", "lavfi", "-i", $"sine=d={seconds}",
             "-c:v", "mpeg4", "-q:v", "5", "-c:a", "pcm_s16le", path,
         ], null, TestContext.Current.CancellationToken);
+        Assert.True(exit == 0, stderr);
+        return path;
+    }
+
+    private async Task<string> MakeAsync(string name, int seconds)
+    {
+        string[] codecs = Path.GetExtension(name) switch
+        {
+            ".mkv" => ["-c:v", "mpeg4", "-c:a", "flac"],
+            ".avi" => ["-c:v", "mpeg4", "-c:a", "pcm_s16le"],
+            ".webm" => ["-c:v", "libvpx", "-c:a", "libvorbis"],
+            ".mp4" => ["-c:v", "mpeg4", "-c:a", "aac"],
+            ".mp3" => ["-c:a", "libmp3lame"],
+            ".m4a" => ["-c:a", "aac"],
+            ".wav" => ["-c:a", "pcm_s16le"],
+            ".flac" => ["-c:a", "flac"],
+            ".ogg" => ["-c:a", "libvorbis"],
+            ".opus" => ["-c:a", "libopus"],
+            var e => throw new ArgumentException(e),
+        };
+        string[] video = codecs[0] == "-c:v" ? ["-f", "lavfi", "-i", $"testsrc2=d={seconds}:s=320x240:r=25"] : [];
+        var path = Path.Combine(_dir, name);
+        var (exit, _, stderr) = await Ffmpeg.RunAsync(_ffmpeg.FfmpegPath,
+            ["-hide_banner", "-nostdin", "-loglevel", "error", .. video, "-f", "lavfi", "-i", $"sine=d={seconds}", .. codecs, path],
+            null, TestContext.Current.CancellationToken);
         Assert.True(exit == 0, stderr);
         return path;
     }

@@ -12,7 +12,7 @@ public sealed record VideoEncoder(string Name, IReadOnlyList<string> Args);
 /// </summary>
 public sealed class EncoderProbe(Ffmpeg ffmpeg, string cacheDirectory)
 {
-    // Constant-quality settings at roughly "visually lossless for sharing"; tuning per preset comes in task 1.6.
+    // Constant-quality settings at roughly "visually lossless for sharing"; per-preset tuning comes with Compress (2.7).
     internal static readonly VideoEncoder[] H264Candidates =
     [
         new("h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0"]),

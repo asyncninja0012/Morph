@@ -27,8 +27,11 @@ public sealed class CapabilityMatrixTests
     {
         Assert.Equal(["convert.png", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.gif", "convert.bmp"], Ids([FileFormat.Jpg]));
         Assert.Contains("convert.jpg", Ids([FileFormat.Heic, FileFormat.Avif]));
-        Assert.Equal(["convert.mp4"], Ids([FileFormat.Mov]));
-        Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Mov]));
+        Assert.Equal(["convert.mp4", "convert.webm", "convert.gif", "convert.mp3"], Ids([FileFormat.Mov]));
+        Assert.Equal(["convert.mp3"], Ids([FileFormat.Mkv, FileFormat.Wav]));
+        Assert.Equal(["convert.mp3", "convert.m4a", "convert.wav", "convert.ogg", "convert.opus"], Ids([FileFormat.Flac]));
+        Assert.Equal(["convert.gif"], Ids([FileFormat.Jpg, FileFormat.Mov])); // imaging and media rows, one job each
+        Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Wav]));
         Assert.Empty(Ids([FileFormat.Unknown]));
     }
 
@@ -43,7 +46,8 @@ public sealed class CapabilityMatrixTests
 
     [Fact]
     public void No_files_offers_every_tool_of_the_wheel() =>
-        Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.gif", "convert.bmp"], Ids([]));
+        Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.webm", "convert.gif",
+            "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp"], Ids([]));
 
     [Fact]
     public void Heic_output_is_disabled_without_hevc()
@@ -54,8 +58,12 @@ public sealed class CapabilityMatrixTests
     }
 
     [Fact]
-    public void Row_names_the_engine() =>
+    public void Row_names_the_engine()
+    {
         Assert.Equal("media", Shipped.RowFor(FileFormat.Mov, "convert.mp4")?.Engine);
+        Assert.Equal("media", Shipped.RowFor(FileFormat.Mp4, "convert.gif")?.Engine);
+        Assert.Equal("imaging", Shipped.RowFor(FileFormat.Png, "convert.gif")?.Engine);
+    }
 
     [Fact]
     public void Missing_requirement_disables_with_reason_and_link()

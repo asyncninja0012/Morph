@@ -44,7 +44,7 @@ public sealed class Ffmpeg(string directory)
 
         if (exit != 0)
         {
-            throw new EngineException("Morph couldn't convert this video.", $"ffmpeg exit {exit}: {stderr.Trim()}");
+            throw new EngineException("Morph couldn't convert this file.", $"ffmpeg exit {exit}: {stderr.Trim()}");
         }
     }
 
