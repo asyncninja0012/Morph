@@ -25,7 +25,8 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void Options_fit_every_file()
     {
-        Assert.Equal(["convert.png", "convert.webp", "convert.gif", "convert.bmp"], Ids([FileFormat.Jpg]));
+        Assert.Equal(["convert.png", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.gif", "convert.bmp"], Ids([FileFormat.Jpg]));
+        Assert.Contains("convert.jpg", Ids([FileFormat.Heic, FileFormat.Avif]));
         Assert.Equal(["convert.mp4"], Ids([FileFormat.Mov]));
         Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Mov]));
         Assert.Empty(Ids([FileFormat.Unknown]));
@@ -42,7 +43,16 @@ public sealed class CapabilityMatrixTests
 
     [Fact]
     public void No_files_offers_every_tool_of_the_wheel() =>
-        Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.mp4", "convert.gif", "convert.bmp"], Ids([]));
+        Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.gif", "convert.bmp"], Ids([]));
+
+    [Fact]
+    public void Heic_output_is_disabled_with_a_store_link_without_hevc()
+    {
+        var option = CapabilityMatrix.LoadDefault(_ => false).OptionsFor([FileFormat.Jpg], WheelGroup.Convert).Single(o => o.Tool.Id == "convert.heic");
+
+        Assert.NotNull(option.DisabledReason);
+        Assert.Equal("ms-windows-store", option.FixLink?.Scheme);
+    }
 
     [Fact]
     public void Row_names_the_engine() =>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -14,8 +15,10 @@ namespace Morph.App;
 
 public sealed partial class App : Application
 {
-    // shortcut: no requirement probes yet, so anything with a requirement counts as missing; HEVC/WIC probing lands in 1.5.
-    private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(_ => false);
+    // Requirements count as missing until probed. shortcut: probed once at startup, so a Store extension installed
+    // while Morph runs shows up after a restart; re-probe on wheel open if that bites.
+    private static volatile bool _canEncodeHeic;
+    private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
     // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land.
     private static readonly WheelItem[] ToolItems =
@@ -39,6 +42,7 @@ public sealed partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        _ = Task.Run(async () => _canEncodeHeic = await SystemCodecs.CanEncodeHeicAsync());
 
         // Created before the overlay windows: WPF makes the first Window the MainWindow, and closing it exits the app.
         MainWindow = new MainWindow();
@@ -73,18 +77,33 @@ public sealed partial class App : Application
 
     // The wheel goes by extension: it opens on DragEnter (no I/O allowed) and virtual files only have names.
     // The Worker sniffs the real format and refuses a file that isn't what its extension says.
-    // shortcut: disabled and beta options aren't drawn yet (no row has a requirement or beta flag); disabled ones are left out.
+    // shortcut: beta isn't drawn yet (no row is beta until PDF → DOCX in Phase 2).
     private static IReadOnlyList<WheelItem> ConvertItems(IReadOnlyList<string> files) =>
     [
         .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], WheelGroup.Convert)
-            .Where(o => o.DisabledReason is null)
-            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
+            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph, o.DisabledReason, o.FixLink)),
     ];
 
     // shortcut: conversions only, results to the console; toasts (1.7) replace this.
     private static void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
+        if (item.DisabledReason is not null)
+        {
+            try
+            {
+                if (item.FixLink is { } fix)
+                {
+                    Process.Start(new ProcessStartInfo(fix.AbsoluteUri) { UseShellExecute = true }); // opens the Store page
+                }
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Console.Error.WriteLine($"Couldn't open {item.FixLink}: {ex.Message}");
+            }
+
+            return;
+        }
         if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
         {
             Console.WriteLine($"{item.Id} isn't wired up yet.");

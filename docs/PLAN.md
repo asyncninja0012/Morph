@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.5.** 1.1–1.4 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.6.** 1.1–1.5 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -307,7 +307,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 - R2 Store policy on low-level keyboard hooks → hook only during drags, explain it in certification notes; fallback: hotkey + menu only.
 - R3 Install size: WPF self-contained runtime can't be trimmed; FFmpeg must be custom-built small. **Measured (0.6, Release R2R, BtbN static FFmpeg):** MSIX 196.5 MB download, 476 MB installed (budgets 120/300). Biggest: ffmpeg.exe 126 MB + ffprobe.exe 126 MB (each statically links every codec), `Microsoft.Windows.SDK.NET.dll` 55 MB (the full WinRT projection the `-windows10.0.22621` TFM pulls in), Magick.Native 24 MB. Levers: custom FFmpeg build with shared libs and only our codecs (~40 MB for both), trimming the WinRT projection to the types we use, then re-measure.
 - R4 Idle RAM ≤ 80 MB with WPF: windows created lazily except the wheel; Worker process exits after each job. **Measured (0.6, packaged, 30 s after launch):** 53.6 MB private, 109 MB working set. PRD §7 doesn't name the metric; private bytes meet it, working set doesn't (it includes shared WPF/DirectX pages). The placeholder MainWindow is still created; the tray app (Phase 1) removes it.
-- R5 Magick.NET's native DLL statically includes LGPL libde265 (HEIC decode). Check whether shipping it as a separate DLL satisfies "replaceable"; else decode HEIC via WIC (needs the free HEIF extension) instead.
+- R5 Magick.NET's native DLL statically includes LGPL libheif/libde265 (HEIC decode). **Decided 4 Nov 2026 (1.5):** read HEIC/AVIF with Magick; Magick.Native-Q8-x64.dll is the separate, replaceable LGPL unit, like ffmpeg.exe (LGPL text + source links in THIRD-PARTY-NOTICES). HEIC output goes through WIC + HEVC Video Extensions, probed at App startup by test-encoding 16x16 (`SystemCodecs.CanEncodeHeicAsync`); missing → the HEIC wedge is drawn disabled with the reason in the centre, and dropping on it opens the Store page.
 - R6 CI runners may lack Media Foundation H.264 → install the feature in CI; golden tests skip HW encoders.
 - R7 PDF→DOCX/XLSX quality is heuristic → labelled beta (CV-5).
 - R8 Press-and-hold mid-drag overrides Explorer's native mid-drag Shift/Ctrl/Alt (move/copy/shortcut). Pressing the key before starting the drag still works natively. Key remapping (IX-1) is the escape hatch.

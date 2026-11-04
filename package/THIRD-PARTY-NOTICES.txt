@@ -5,7 +5,14 @@ Magick.NET-Q8-x64 14.17.2
 https://github.com/dlemstra/Magick.NET
 Licence: Apache-2.0 (https://github.com/dlemstra/Magick.NET/blob/main/License.txt)
 Includes ImageMagick (ImageMagick licence, https://imagemagick.org/script/license.php) and its
-delegate libraries. libheif and libde265 are LGPL; see PLAN.md risk R5.
+delegate libraries, statically linked into Magick.Native-Q8-x64.dll. Morph uses them to read HEIC and
+AVIF and to write AVIF.
+libheif and libde265 are licensed under the GNU Lesser General Public License v3.0
+(https://www.gnu.org/licenses/lgpl-3.0.html). They are shipped inside Magick.Native-Q8-x64.dll, a separate,
+replaceable library that Morph loads at run time; you may replace it with your own build.
+Source of that DLL and the exact library versions: https://github.com/dlemstra/Magick.Native (tag matching
+Magick.NET 14.17.2); https://github.com/strukturag/libheif; https://github.com/strukturag/libde265
+(written source offer to follow with the 1.0 release, PLAN 5.4).
 --------------------------------------------------------------------------------
 FFmpeg 9.0.2 (ffmpeg.exe, ffprobe.exe), LGPL build
 https://ffmpeg.org/  Build: https://github.com/BtbN/FFmpeg-Builds (win64-lgpl variant)

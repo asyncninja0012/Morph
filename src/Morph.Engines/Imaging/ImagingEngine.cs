@@ -5,7 +5,10 @@ using Morph.Core.Jobs;
 
 namespace Morph.Engines.Imaging;
 
-/// <summary>Image ↔ image conversion with Magick.NET (PLAN §5). Tool ids: convert.png/jpg/webp/gif/bmp.</summary>
+/// <summary>
+/// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp.
+/// </summary>
 public sealed class ImagingEngine : IEngine
 {
     private static readonly Dictionary<string, MagickFormat> Targets = new(StringComparer.OrdinalIgnoreCase)
@@ -15,9 +18,12 @@ public sealed class ImagingEngine : IEngine
         ["webp"] = MagickFormat.WebP,
         ["gif"] = MagickFormat.Gif,
         ["bmp"] = MagickFormat.Bmp,
+        ["tiff"] = MagickFormat.Tiff,
+        ["avif"] = MagickFormat.Avif,
+        ["heic"] = MagickFormat.Heic, // written by WIC, not Magick
     };
 
-    // shortcut: Phase 0 inputs only; HEIC/AVIF input lands with task 1.5 (R5).
+    // HEIC/AVIF decode uses libheif/libde265 inside Magick.Native (LGPL, replaceable DLL; PLAN R5).
     private static readonly Dictionary<string, MagickFormat> Readable = new()
     {
         ["jpg"] = MagickFormat.Jpeg,
@@ -26,6 +32,8 @@ public sealed class ImagingEngine : IEngine
         ["bmp"] = MagickFormat.Bmp,
         ["webp"] = MagickFormat.WebP,
         ["tiff"] = MagickFormat.Tiff,
+        ["heic"] = MagickFormat.Heic,
+        ["avif"] = MagickFormat.Avif,
     };
 
     static ImagingEngine()
@@ -63,20 +71,26 @@ public sealed class ImagingEngine : IEngine
             using var image = new MagickImage();
             await image.ReadAsync(source, new MagickReadSettings { Format = inFormat }, ct).ConfigureAwait(false);
             image.AutoOrient(); // phone photos store rotation in EXIF; formats without EXIF would show them sideways
-            if (outFormat is MagickFormat.Jpeg or MagickFormat.Bmp)
+            if (outFormat is MagickFormat.Jpeg or MagickFormat.Bmp or MagickFormat.Heic)
             {
                 image.BackgroundColor = MagickColors.White;
                 image.Alpha(AlphaOption.Remove);
             }
 
-            if (job.Parameters?["quality"]?.GetValue<int>() is int quality)
+            var quality = job.Parameters?["quality"]?.GetValue<int>();
+            if (quality is { } q)
             {
-                image.Quality = (uint)Math.Clamp(quality, 1, 100); // lossy outputs only: PNG reads it as zlib level + filter
+                image.Quality = (uint)Math.Clamp(q, 1, 100); // lossy outputs only: PNG reads it as zlib level + filter
             }
 
             var pending = namer.Reserve(input, "." + target);
-            await using (var output = new FileStream(pending.TempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            if (outFormat == MagickFormat.Heic)
             {
+                await WicHeic.WriteAsync(image, pending.TempPath, quality, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await using var output = new FileStream(pending.TempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
                 await image.WriteAsync(output, outFormat, ct).ConfigureAwait(false);
             }
 
