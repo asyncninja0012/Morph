@@ -30,6 +30,9 @@ public sealed partial class App : Application
         new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
     ];
 
+    private static readonly JobQueue Jobs = new((request, progress, ct) =>
+        WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
+
     private readonly DragGestureDetector _dragGestures = new();
     private DragWheelController? _wheel;
 
@@ -53,6 +56,9 @@ public sealed partial class App : Application
         });
         _wheel.Diagnostic += m => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {m}");
         _wheel.ItemDropped += OnItemDropped;
+        Jobs.Updated += u => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {u.Request.ToolId} {u.Request.Id:N} {u.Status} "
+            + (u.Progress is { } p ? $"{p.Fraction:P0} {p.Stage}" : "")
+            + (u.Result is { } r ? $"in {r.Elapsed.TotalMilliseconds:F0} ms: " + (r.Status == JobStatus.Succeeded ? string.Join(", ", r.Outputs) : $"{r.UserMessage} {r.Details}") : ""));
 
         try
         {
@@ -75,8 +81,8 @@ public sealed partial class App : Application
             .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
     ];
 
-    // shortcut: conversions only, one Worker per drop, results to the console; the queue (1.3) and toasts (1.7) replace this.
-    private static async void OnItemDropped(WheelItem item, DroppedFiles files)
+    // shortcut: conversions only, results to the console; toasts (1.7) replace this.
+    private static void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
         if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
@@ -85,27 +91,14 @@ public sealed partial class App : Application
             return;
         }
 
-        try
+        // Files already in the target format are skipped. Output goes next to each original; virtual files
+        // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder).
+        foreach (var g in files.Paths
+            .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
+            .Where(f => f.Row is not null)
+            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!)))
         {
-            // Files already in the target format are skipped. Output goes next to each original; virtual files
-            // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder).
-            var results = await Task.WhenAll(files.Paths
-                .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
-                .Where(f => f.Row is not null)
-                .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!))
-                .Select(g => WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"),
-                    new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder),
-                    new Progress<JobProgress>(p => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {item.Id} {p.Fraction:P0} {p.Stage}")),
-                    CancellationToken.None)));
-            foreach (var r in results)
-            {
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {r.Status} in {r.Elapsed.TotalMilliseconds:F0} ms: "
-                    + (r.Status == JobStatus.Succeeded ? string.Join(", ", r.Outputs) : $"{r.UserMessage} {r.Details}"));
-            }
-        }
-        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            Console.Error.WriteLine($"Job failed to run: {ex}");
+            Jobs.Enqueue(new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder));
         }
     }
 

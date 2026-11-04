@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.3.** 1.1–1.2 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.4.** 1.1–1.3 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -125,6 +125,7 @@ public interface IJobQueue      // JB-1: max(1, cores-1) parallel, ≤2 media; C
     IObservable<JobUpdate> Updates { get; }   // drives toasts and history
 }
 public sealed record JobHandle(Guid Id, Task<JobResult> Completion, Action Cancel);
+// As built (1.3): `JobQueue` class with an `Updated` event instead of IObservable (no Rx dependency); media slot taken before a general one.
 
 public interface IUndoService   // JB-5: recycle a job's outputs within 10 min
 {
