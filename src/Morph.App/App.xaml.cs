@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 
+using Morph.App.Toasts;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
@@ -36,6 +37,7 @@ public sealed partial class App : Application
         WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
 
     private readonly DragGestureDetector _dragGestures = new();
+    private ToastHost? _toasts;
     private DragWheelController? _wheel;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -46,6 +48,7 @@ public sealed partial class App : Application
         // Created before the overlay windows: WPF makes the first Window the MainWindow, and closing it exits the app.
         MainWindow = new MainWindow();
         MainWindow.Show();
+        _toasts = new ToastHost(Jobs, Dispatcher);
 
         // shortcut: spike logging to the launching console (tasks 0.2–0.3); replace with ILogger when logging lands in Phase 1.
         PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
@@ -85,8 +88,8 @@ public sealed partial class App : Application
             .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
     ];
 
-    // shortcut: conversions only, results to the console; toasts (1.7) replace this.
-    private static void OnItemDropped(WheelItem item, DroppedFiles files)
+    // shortcut: conversions only; Tools/Actions wedges still just log.
+    private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
         if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
@@ -96,15 +99,24 @@ public sealed partial class App : Application
         }
 
         // Files already in the target format are skipped. Output goes next to each original; virtual files
-        // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder).
-        foreach (var g in files.Paths
+        // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder), one toast per drop.
+        var jobs = files.Paths
             .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
             .Where(f => f.Row is not null)
-            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!)))
+            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!))
+            .Select(g => new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
+                Matrix.Tool(item.Id)?.Defaults?.DeepClone().AsObject()))
+            .Select(r => (r, Jobs.Enqueue(r)))
+            .ToList();
+
+        var title = files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files";
+        if (jobs.Count == 0)
         {
-            Jobs.Enqueue(new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
-                Matrix.Tool(item.Id)?.Defaults?.DeepClone().AsObject()));
+            _toasts?.Info(title, $"Already {item.Label}. Nothing to convert.");
+            return;
         }
+
+        _toasts?.Track(jobs, title, item.Label);
     }
 
     protected override void OnExit(ExitEventArgs e)

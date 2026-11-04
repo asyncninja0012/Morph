@@ -1,0 +1,44 @@
+<Window x:Class="Morph.App.Toasts.ToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Morph" Width="372" SizeToContent="Height"
+        ThemeMode="System" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True">
+    <!-- Margin leaves room for the shadow; AllowsTransparency gives the rounded card corners. -->
+    <Border Margin="12" CornerRadius="8" BorderThickness="1" Padding="14,12,8,12"
+            Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
+            BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.25" />
+        </Border.Effect>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="GlyphText" Grid.RowSpan="2" Margin="0,2,12,0" FontSize="20" VerticalAlignment="Top"
+                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+            <TextBlock x:Name="TitleText" Grid.Column="1" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Button x:Name="CloseButton" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Padding="6,2" Margin="8,-4,0,0"
+                    Background="Transparent" BorderThickness="0" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                    Content="&#xE8BB;" ToolTip="Close" AutomationProperties.Name="Close" />
+            <TextBlock x:Name="MessageText" Grid.Row="1" Grid.Column="1" Margin="0,2,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ProgressBar x:Name="Bar" Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Minimum="0" Maximum="1" />
+            <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,6,0">
+                <Button x:Name="CopyDetailsButton" Content="Copy details" Margin="0,0,8,0" />
+                <Button x:Name="ShowFolderButton" Content="Show in folder" Style="{DynamicResource AccentButtonStyle}" Margin="0,0,8,0" />
+                <Button x:Name="CancelButton" Content="Cancel" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -1,2 +1,5 @@
 AttachConsole
 ATTACH_PARENT_PROCESS
+GetWindowLongPtr
+SetWindowLongPtr
+WINDOW_EX_STYLE
