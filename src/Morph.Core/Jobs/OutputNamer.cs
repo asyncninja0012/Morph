@@ -1,68 +1,55 @@
 namespace Morph.Core.Jobs;
 
-/// <param name="TempPath">Where the engine writes. Same folder as the output, so the commit is a rename.</param>
-/// <param name="FinalPath">The name wanted; the commit picks "name (2).ext" if it is taken by then.</param>
-public sealed record PendingOutput(string TempPath, string FinalPath);
+/// <param name="Path">The output's final name. <see cref="OutputNamer.Reserve"/> has already created it empty; the engine overwrites it.</param>
+public sealed record PendingOutput(string Path);
 
 /// <summary>
-/// Output naming and temp+rename for one job (JB-3/JB-4). Never overwrites anything: a clash becomes "photo (2).png".
+/// Output naming for one job (JB-3). Each output appears under its final name as soon as it is reserved and fills in while
+/// the engine writes (developer's call, replaces JB-4's temp + rename). Never overwrites anything: a clash becomes
+/// "photo (2).png". A failed or cancelled job deletes its outputs; a killed Worker can leave a partial file behind.
 /// </summary>
 public sealed class OutputNamer(string outputDirectory)
 {
-    private readonly List<PendingOutput> _pending = [];
+    private readonly List<string> _reserved = [];
 
-    /// <summary>photo.jpg + ".png" → photo.png. Nothing is created on disk until the engine writes the temp path.</summary>
+    /// <summary>photo.jpg + ".png" → photo.png, or the first free "photo (n).png", created empty so nothing else takes it.</summary>
     public PendingOutput Reserve(string input, string extension, string suffix = "")
     {
-        // Not hidden: Magick and ffmpeg open with CREATE_ALWAYS, which fails with access denied on a hidden file.
-        var temp = Path.Combine(outputDirectory, $".morph-{Guid.NewGuid():N}.tmp");
-        var final = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(input) + suffix + extension);
-        var pending = new PendingOutput(temp, final);
-        _pending.Add(pending);
-        return pending;
-    }
-
-    /// <summary>Renames every temp file to a free final name, in reservation order.</summary>
-    /// <returns>The final paths.</returns>
-    public IReadOnlyList<string> CommitAll()
-    {
-        var outputs = new List<string>(_pending.Count);
-        foreach (var p in _pending)
+        var wanted = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(input) + suffix + extension);
+        for (var n = 1; ; n++)
         {
-            for (var n = 1; ; n++)
+            var candidate = n == 1 ? wanted : Numbered(wanted, n);
+            try
             {
-                var candidate = n == 1 ? p.FinalPath : Numbered(p.FinalPath, n);
-                if (File.Exists(candidate) || Directory.Exists(candidate))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    File.Move(p.TempPath, candidate, overwrite: false);
-                    outputs.Add(candidate);
-                    break;
-                }
-                catch (IOException) when (File.Exists(candidate))
-                {
-                    // Lost a race with another writer; try the next number.
-                }
+                // CreateNew is atomic: it fails rather than take a file another writer created a moment ago.
+                new FileStream(candidate, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete).Dispose();
+                _reserved.Add(candidate);
+                return new PendingOutput(candidate);
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && (File.Exists(candidate) || Directory.Exists(candidate)))
+            {
+                // Taken (by a file or a folder); try the next number.
             }
         }
+    }
 
-        _pending.Clear();
+    /// <returns>The outputs, in reservation order.</returns>
+    public IReadOnlyList<string> CommitAll()
+    {
+        IReadOnlyList<string> outputs = [.. _reserved];
+        _reserved.Clear();
         return outputs;
     }
 
-    /// <summary>Deletes every temp file written so far (failure or cancel).</summary>
+    /// <summary>Deletes every output reserved so far (failure or cancel).</summary>
     public void AbortAll()
     {
-        foreach (var p in _pending)
+        foreach (var path in _reserved)
         {
-            File.Delete(p.TempPath);
+            File.Delete(path);
         }
 
-        _pending.Clear();
+        _reserved.Clear();
     }
 
     private static string Numbered(string path, int n) =>

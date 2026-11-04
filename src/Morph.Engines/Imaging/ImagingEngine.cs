@@ -86,11 +86,11 @@ public sealed class ImagingEngine : IEngine
             var pending = namer.Reserve(input, "." + target);
             if (outFormat == MagickFormat.Heic)
             {
-                await WicHeic.WriteAsync(image, pending.TempPath, quality, ct).ConfigureAwait(false);
+                await WicHeic.WriteAsync(image, pending.Path, quality, ct).ConfigureAwait(false);
             }
             else
             {
-                await using var output = new FileStream(pending.TempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
+                await using var output = new FileStream(pending.Path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
                 await image.WriteAsync(output, outFormat, ct).ConfigureAwait(false);
             }
 

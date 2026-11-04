@@ -1,10 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Nodes;
 
 using Morph.Core.Jobs;
 
 namespace Morph.Engines.Media;
+
+/// <param name="Duration">Seconds, or null when unknown.</param>
+public sealed record MediaInfo(double? Duration, string? VideoCodec, string? PixelFormat, string? AudioCodec);
 
 /// <summary>Runs the bundled LGPL ffmpeg.exe/ffprobe.exe (PLAN §5). Never a system copy: that could be a GPL build.</summary>
 public sealed class Ffmpeg(string directory)
@@ -17,13 +21,23 @@ public sealed class Ffmpeg(string directory)
 
     public bool IsAvailable => File.Exists(FfmpegPath) && File.Exists(FfprobePath);
 
-    /// <summary>Container duration in seconds, or null when ffprobe can't tell (progress is then indeterminate).</summary>
-    public async Task<double?> DurationAsync(string input, string demuxer, CancellationToken ct)
+    /// <summary>Duration (null when ffprobe can't tell; progress is then indeterminate) and the first video and audio codecs.</summary>
+    public async Task<MediaInfo> ProbeAsync(string input, string demuxer, CancellationToken ct)
     {
         var (exit, stdout, _) = await RunAsync(FfprobePath,
-            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration", "-of", "csv=p=0", input],
+            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration:stream=codec_type,codec_name,pix_fmt",
+                "-of", "json", input],
             onStdoutLine: null, ct).ConfigureAwait(false);
-        return exit == 0 && double.TryParse(stdout.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0 ? d : null;
+        if (exit != 0 || JsonNode.Parse(stdout) is not { } json)
+        {
+            return new MediaInfo(null, null, null, null);
+        }
+
+        var streams = json["streams"]?.AsArray() ?? [];
+        var video = streams.FirstOrDefault(s => (string?)s?["codec_type"] == "video");
+        var audio = streams.FirstOrDefault(s => (string?)s?["codec_type"] == "audio");
+        var duration = double.TryParse((string?)json["format"]?["duration"], NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0 ? d : (double?)null;
+        return new MediaInfo(duration, (string?)video?["codec_name"], (string?)video?["pix_fmt"], (string?)audio?["codec_name"]);
     }
 
     /// <summary>

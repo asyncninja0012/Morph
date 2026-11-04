@@ -48,7 +48,17 @@ public sealed class GoldenTests : IDisposable
         return rows;
     }
 
-    public void Dispose() => Directory.Delete(_dir, recursive: true);
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // A just-written output can still be open in a virus scan or the thumbnailer; it's a temp folder.
+        }
+    }
 
     [Theory]
     [MemberData(nameof(Rows))]

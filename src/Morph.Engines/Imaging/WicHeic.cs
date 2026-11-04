@@ -30,7 +30,7 @@ internal static class WicHeic
             encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore, image.Width, image.Height, 96, 96, bgra);
             await encoder.FlushAsync().AsTask(ct).ConfigureAwait(false);
 
-            await using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous);
+            await using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous);
             await stream.GetInputStreamAt(0).AsStreamForRead().CopyToAsync(output, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException or IOException))

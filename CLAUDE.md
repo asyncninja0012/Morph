@@ -55,7 +55,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 
 ## Never
 - Modify, move or delete an original file (except the explicit Move to… action, and opt-in overwrite, which recycles the original).
-- Write output anywhere except a temp file in the target folder, renamed on success.
+- Write output anywhere except the name `OutputNamer.Reserve` gave you in the target folder (created empty at once, so the file shows under its real name while it fills in; a failed or cancelled job deletes it).
 - Block the UI thread or do I/O on it; never block inside a low-level hook callback.
 - Make network calls outside the pack downloader. No telemetry.
 - Add a dependency, change a licence-relevant build flag, or swap a library without asking.

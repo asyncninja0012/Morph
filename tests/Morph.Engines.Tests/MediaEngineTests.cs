@@ -42,8 +42,8 @@ public sealed class MediaEngineTests : IDisposable
         var (_, streams, _) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath,
             ["-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0", outputs[0]], null, TestContext.Current.CancellationToken);
         Assert.Equal(["h264", "aac"], streams.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        var duration = await _ffmpeg.DurationAsync(outputs[0], "mov", TestContext.Current.CancellationToken);
-        Assert.InRange(duration!.Value, 1.9, 2.1);
+        var info = await _ffmpeg.ProbeAsync(outputs[0], "mov", TestContext.Current.CancellationToken);
+        Assert.InRange(info.Duration!.Value, 1.9, 2.1);
         Assert.Equal(1.0, reports[^1].Fraction);
         TestContext.Current.TestOutputHelper?.WriteLine($"encoder: {encoder.Name}");
     }
@@ -62,7 +62,29 @@ public sealed class MediaEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Cancel_kills_ffmpeg_and_leaves_no_temp_file()
+    public async Task Streams_already_in_the_target_codecs_are_copied_not_re_encoded()
+    {
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var input = Path.Combine(_dir, "clip.mkv");
+        var (exit, _, stderr) = await Ffmpeg.RunAsync(_ffmpeg.FfmpegPath,
+        [
+            "-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=d=1:s=320x240:r=25",
+            "-f", "lavfi", "-i", "sine=d=1", "-c:v", "libvpx-vp9", "-crf", "4", "-b:v", "0", "-c:a", "libopus", input,
+        ], null, TestContext.Current.CancellationToken);
+        Assert.True(exit == 0, stderr);
+        var namer = new OutputNamer(_dir);
+
+        await Engine().RunAsync(Job(input, "webm"), namer, new SyncProgress<JobProgress>(_ => { }), TestContext.Current.CancellationToken);
+        var output = Assert.Single(namer.CommitAll());
+
+        // A re-encode at CRF 32 would be several times smaller than this near-lossless input.
+        Assert.InRange(new FileInfo(output).Length, new FileInfo(input).Length * 0.9, new FileInfo(input).Length * 1.1);
+        var info = await _ffmpeg.ProbeAsync(output, "matroska", TestContext.Current.CancellationToken);
+        Assert.Equal(("vp9", "opus"), (info.VideoCodec, info.AudioCodec));
+    }
+
+    [Fact]
+    public async Task Cancel_kills_ffmpeg_and_leaves_no_output()
     {
         await RequireEncoderAsync();
         var input = await MakeMovAsync("long.mov", seconds: 120);
@@ -147,9 +169,9 @@ public sealed class MediaEngineTests : IDisposable
         {
             return p.MainModule?.FileName;
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            return null;
+            return null; // access denied, or the process exited while we looked
         }
     }
 }
