@@ -23,7 +23,7 @@ public sealed class DragWheelController : IDisposable
     private static readonly TimeSpan DropGrace = TimeSpan.FromSeconds(2);
 
     private readonly DragGestureDetector _detector;
-    private readonly Func<ModifierKey, IReadOnlyList<WheelItem>> _itemsFor;
+    private readonly Func<ModifierKey, IReadOnlyList<string>, IReadOnlyList<WheelItem>> _itemsFor;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly WheelWindow _wheel = new();
     private readonly List<DropCatcherWindow> _catchers = [];
@@ -42,7 +42,8 @@ public sealed class DragWheelController : IDisposable
     private bool _virtualFiles;
     private bool _dark = IsDarkMode();
 
-    public DragWheelController(DragGestureDetector detector, Func<ModifierKey, IReadOnlyList<WheelItem>> itemsFor)
+    /// <param name="itemsFor">Wedges for the held key and the dragged paths (or virtual file names).</param>
+    public DragWheelController(DragGestureDetector detector, Func<ModifierKey, IReadOnlyList<string>, IReadOnlyList<WheelItem>> itemsFor)
     {
         _detector = detector;
         _itemsFor = itemsFor;
@@ -87,7 +88,7 @@ public sealed class DragWheelController : IDisposable
     private void WarmUp()
     {
         var offScreen = new Windows.Win32.Foundation.RECT(-32000, -32000, -31000, -31000);
-        _wheel.SetContent(_itemsFor(ModifierKey.Shift), "0", "files", _dark);
+        _wheel.SetContent(_itemsFor(ModifierKey.Shift, []), "0", "files", _dark);
         NativeWindows.Place(_wheel.Hwnd, offScreen);
         _wheel.Show();
         _catchers.ForEach(c => c.ShowOn(offScreen));
@@ -302,7 +303,7 @@ public sealed class DragWheelController : IDisposable
 
     private void ShowWheel()
     {
-        var items = _itemsFor(_group);
+        var items = _itemsFor(_group, _files);
         var (count, caption) = Describe(_files);
         _wheel.SetContent(items, count, caption, _dark);
         _wheel.ShowAt(NativeWindows.CursorPosition());

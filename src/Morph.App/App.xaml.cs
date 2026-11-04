@@ -42,9 +42,9 @@ public sealed partial class App : Application
         PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
         _dragGestures.GestureDetected += g => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {g}");
 
-        _wheel = new DragWheelController(_dragGestures, key => key switch
+        _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
         {
-            ModifierKey.Shift => ConvertItems,
+            ModifierKey.Shift => [.. ConvertItems.Where(i => !AllAlready(files, i.Id))],
             ModifierKey.Ctrl => ToolItems,
             _ => ActionItems,
         });
@@ -92,6 +92,11 @@ public sealed partial class App : Application
             Console.Error.WriteLine($"Job failed to run: {ex}");
         }
     }
+
+    // No "convert to PNG" when every dragged file is already a PNG (jpeg counts as jpg).
+    // shortcut: by extension; the capability matrix (task 1.2) decides from sniffed formats.
+    private static bool AllAlready(IReadOnlyList<string> files, string toolId) =>
+        files.Count > 0 && files.All(f => Path.GetExtension(f).TrimStart('.').ToLowerInvariant().Replace("jpeg", "jpg") == toolId["convert.".Length..]);
 
     protected override void OnExit(ExitEventArgs e)
     {

@@ -24,6 +24,7 @@
 - Tests: `OutputNamerTests`, `ImagingEngineTests` (JPG→PNG, original untouched, no temp left; non-image rejected), `DragFilesTests` (descriptor parsing, unsafe names).
 
 ### Fixed
+- The Convert wheel no longer offers the format the files already are (dragging PNGs hides the PNG wedge; `.jpeg` counts as JPG). Mixed drags keep every wedge.
 - Wheel glyphs in `App.xaml.cs` were garbled by an encoding round-trip in task 0.4; restored.
 
 ### Changed
