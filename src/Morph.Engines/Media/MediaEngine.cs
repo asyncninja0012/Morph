@@ -1,3 +1,4 @@
+using Morph.Core.Formats;
 using Morph.Core.Jobs;
 
 namespace Morph.Engines.Media;
@@ -30,7 +31,11 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
         for (var i = 0; i < job.Inputs.Count; i++)
         {
             var input = job.Inputs[i];
-            var demuxer = Sniff(input) ?? throw new EngineException($"{Path.GetFileName(input)} isn't a video Morph can read.");
+            var demuxer = (await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id switch
+            {
+                "mp4" or "mov" => "mov", // ffmpeg's mov demuxer reads all ISO-BMFF
+                _ => null, // shortcut: MKV/WebM/AVI input lands with task 1.6
+            } ?? throw new EngineException($"{Path.GetFileName(input)} isn't a video Morph can read.");
             var duration = await ffmpeg.DurationAsync(input, demuxer, ct).ConfigureAwait(false);
             var pending = namer.Reserve(input, ".mp4");
             var done = i;
@@ -50,20 +55,5 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             ];
             await ffmpeg.EncodeAsync(args, duration, fileProgress, ct).ConfigureAwait(false);
         }
-    }
-
-    // shortcut: ISO-BMFF/QuickTime atom check for the Phase 0 MOV→MP4 path; FileSniffer (task 1.1) replaces it.
-    internal static string? Sniff(string path)
-    {
-        Span<byte> h = stackalloc byte[8];
-        using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-        {
-            if (file.ReadAtLeast(h, h.Length, throwOnEndOfStream: false) < h.Length)
-            {
-                return null;
-            }
-        }
-
-        return System.Text.Encoding.ASCII.GetString(h[4..]) is "ftyp" or "moov" or "mdat" or "wide" or "free" or "skip" ? "mov" : null;
     }
 }

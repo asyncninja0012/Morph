@@ -1,5 +1,6 @@
 using ImageMagick;
 
+using Morph.Core.Formats;
 using Morph.Core.Jobs;
 
 namespace Morph.Engines.Imaging;
@@ -14,6 +15,17 @@ public sealed class ImagingEngine : IEngine
         ["webp"] = MagickFormat.WebP,
         ["gif"] = MagickFormat.Gif,
         ["bmp"] = MagickFormat.Bmp,
+    };
+
+    // shortcut: Phase 0 inputs only; HEIC/AVIF input lands with task 1.5 (R5).
+    private static readonly Dictionary<string, MagickFormat> Readable = new()
+    {
+        ["jpg"] = MagickFormat.Jpeg,
+        ["png"] = MagickFormat.Png,
+        ["gif"] = MagickFormat.Gif,
+        ["bmp"] = MagickFormat.Bmp,
+        ["webp"] = MagickFormat.WebP,
+        ["tiff"] = MagickFormat.Tiff,
     };
 
     static ImagingEngine()
@@ -37,12 +49,17 @@ public sealed class ImagingEngine : IEngine
         {
             ct.ThrowIfCancellationRequested();
             var input = job.Inputs[i];
+            var sniffed = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
             await using var source = new FileStream(input, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
                 4096, FileOptions.Asynchronous);
 
             // The format comes from magic bytes, never from Magick's own detection, so a hostile file can't reach
             // script-like coders (MVG, MSL, SVG, PS).
-            var inFormat = Sniff(source) ?? throw new EngineException($"{Path.GetFileName(input)} isn't an image Morph can read.");
+            if (!Readable.TryGetValue(sniffed.Id, out var inFormat))
+            {
+                throw new EngineException($"{Path.GetFileName(input)} isn't an image Morph can read.");
+            }
+
             using var image = new MagickImage();
             await image.ReadAsync(source, new MagickReadSettings { Format = inFormat }, ct).ConfigureAwait(false);
             image.AutoOrient(); // phone photos store rotation in EXIF; formats without EXIF would show them sideways
@@ -60,24 +77,5 @@ public sealed class ImagingEngine : IEngine
 
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
         }
-    }
-
-    // shortcut: magic-byte check for the formats Phase 0 needs; FileSniffer (task 1.1) replaces it.
-    internal static MagickFormat? Sniff(Stream stream)
-    {
-        Span<byte> h = stackalloc byte[12];
-        var n = stream.ReadAtLeast(h, h.Length, throwOnEndOfStream: false);
-        stream.Position = 0;
-        h = h[..n];
-        return h switch
-        {
-            [0xFF, 0xD8, 0xFF, ..] => MagickFormat.Jpeg,
-            [0x89, (byte)'P', (byte)'N', (byte)'G', ..] => MagickFormat.Png,
-            [(byte)'G', (byte)'I', (byte)'F', (byte)'8', ..] => MagickFormat.Gif,
-            [(byte)'B', (byte)'M', ..] => MagickFormat.Bmp,
-            [(byte)'R', (byte)'I', (byte)'F', (byte)'F', _, _, _, _, (byte)'W', (byte)'E', (byte)'B', (byte)'P'] => MagickFormat.WebP,
-            [(byte)'I', (byte)'I', 0x2A, 0x00, ..] or [(byte)'M', (byte)'M', 0x00, 0x2A, ..] => MagickFormat.Tiff,
-            _ => null,
-        };
     }
 }

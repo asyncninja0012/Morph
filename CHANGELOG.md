@@ -5,6 +5,7 @@
 Phase 0 (spikes) complete: drag wheel, image and video conversion in a sandboxed worker, MSIX packaging.
 
 ### Added
+- File sniffing (task 1.1): `Morph.Core.Formats.FileSniffer` detects every CV-2 input format from a 64 KB header (JPG, PNG, GIF, BMP, TIFF, WebP, HEIC, AVIF, MP4, MOV, MKV, WebM, AVI, MP3, M4A, WAV, FLAC, OGG, Opus, PDF, ZIP, TAR, GZIP, WebVTT). Magic bytes win over the extension; the extension only breaks ties inside ISO-BMFF (MP4/M4A/MOV) and names plain-text formats (TXT, MD, HTML, CSV, SRT). ZIPs are opened to recognise DOCX/XLSX/PPTX; ODT/ODS/ODP come from the stored `mimetype` entry. `FileKind`/`FileFormat` records per PLAN §2. The Imaging and Media engines use it instead of their Phase 0 checks. `FileSnifferTests`.
 - Repo skeleton (task 0.1): `Morph.slnx`, `Directory.Build.props` (net10.0-windows10.0.22621.0, C# 14, nullable, warnings as errors, x64), central package versions, `global.json` (SDK 10.0.403, Microsoft.Testing.Platform runner), `.editorconfig`.
 - Projects: `Morph.Core`, `Morph.Engines`, `Morph.Worker`, `Morph.Overlay`, `Morph.App` (placeholder window), `Morph.Core.Tests`, `Morph.Engines.Tests` (xunit.v3 dependency-rule tests).
 - GitHub Actions CI: restore, format check, build, unit tests.
