@@ -38,6 +38,10 @@ public sealed partial class App : Application
     {
         base.OnStartup(e);
 
+        // Created before the overlay windows: WPF makes the first Window the MainWindow, and closing it exits the app.
+        MainWindow = new MainWindow();
+        MainWindow.Show();
+
         // shortcut: spike logging to the launching console (tasks 0.2–0.3); replace with ILogger when logging lands in Phase 1.
         PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
         _dragGestures.GestureDetected += g => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {g}");
