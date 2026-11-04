@@ -28,6 +28,7 @@ jobs:
       - run: dotnet restore Morph.slnx
       - run: dotnet format Morph.slnx --verify-no-changes --no-restore
       - run: dotnet build Morph.slnx -c Release --no-restore
+      - run: dotnet run build/gen-fixtures.cs
       # UI tests need an interactive desktop and run locally only.
       - run: dotnet test Morph.slnx -c Release --no-build --filter-not-trait "Category=UI"
       - run: ./build/pack.ps1 -Configuration Release -NoSign

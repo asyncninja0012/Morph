@@ -1,6 +1,5 @@
 using System.Diagnostics;
 
-using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Engines.Media;
 
@@ -49,44 +48,7 @@ public sealed class MediaEngineTests : IDisposable
         TestContext.Current.TestOutputHelper?.WriteLine($"encoder: {encoder.Name}");
     }
 
-    [Theory]
-    [InlineData("clip.mkv", "webm", "vp9,opus")]
-    [InlineData("clip.avi", "mp4", "h264,aac")]
-    [InlineData("clip.webm", "gif", "gif")]
-    [InlineData("clip.mp4", "mp3", "mp3")]
-    [InlineData("tone.wav", "mp3", "mp3")]
-    [InlineData("tone.mp3", "m4a", "aac")]
-    [InlineData("tone.m4a", "wav", "pcm_s16le")]
-    [InlineData("tone.wav", "flac", "flac")]
-    [InlineData("tone.flac", "ogg", "vorbis")]
-    [InlineData("tone.ogg", "opus", "opus")]
-    [InlineData("tone.opus", "wav", "pcm_s16le")]
-    public async Task Converts_to_the_target_codecs_with_the_same_duration(string name, string target, string codecs)
-    {
-        if (target == "mp4")
-        {
-            await RequireEncoderAsync();
-        }
-        else
-        {
-            Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
-        }
-
-        var input = await MakeAsync(name, seconds: 1);
-        var namer = new OutputNamer(_dir);
-
-        await Engine().RunAsync(Job(input, target), namer, new SyncProgress<JobProgress>(_ => { }), TestContext.Current.CancellationToken);
-        var output = Assert.Single(namer.CommitAll());
-
-        Assert.Equal(target, (await FileSniffer.Instance.DetectAsync(output, TestContext.Current.CancellationToken)).Id);
-        var (_, streams, _) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath,
-            ["-v", "error", "-show_entries", "stream=codec_name,duration", "-show_entries", "format=duration", "-of", "csv=p=0", output],
-            null, TestContext.Current.CancellationToken);
-        var lines = streams.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(codecs.Split(','), lines[..^1].Select(l => l.Split(',')[0]));
-        Assert.InRange(double.Parse(lines[^1], System.Globalization.CultureInfo.InvariantCulture), 0.85, 1.15);
-    }
-
+    // Every input/output pair runs through the Worker in GoldenTests.
     [Fact]
     public async Task Audio_to_video_fails_with_a_user_message()
     {
@@ -140,7 +102,7 @@ public sealed class MediaEngineTests : IDisposable
         return encoder!;
     }
 
-    // shortcut: fixtures made in-test until build/gen-fixtures.cs lands (task 1.8).
+    // Made in-test, not by gen-fixtures: the cancel test needs a long clip.
     private async Task<string> MakeMovAsync(string name, int seconds)
     {
         var path = Path.Combine(_dir, name);

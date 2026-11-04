@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — next task 1.8.** 1.1–1.7 done. Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 1 — tasks 1.1–1.8 done; Phase 1 demo to be run by the developer, then Phase 2 (task 2.1).** Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -272,7 +272,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 **Demo:** drag a JPG from Explorer, hold Shift, drop on PNG → `photo.png` appears; repeat from desktop, Edge downloads bar, Outlook attachment; Esc continues a normal drag; drop outside the wheel does nothing; Explorer never shows a move; MSIX installs non-elevated; report wheel latency and idle RAM.
 
 ### Phase 1 — Core pipeline + media/image conversions (wk 3–5) · CV-1/2/3/4/6, JB-1..4, IX-3
-1.1 FileSniffer + tests. 1.2 capabilities.json + matrix (intersection, disabled reasons). 1.3 OutputNamer + JobQueue (parallel limits, cancel). 1.4 Worker protocol + engine host. 1.5 Imaging conversions + HEIC/WIC detection. 1.6 Video/audio conversions + GIF palette pipeline. 1.7 Toasts (progress, cancel, show in folder). **As built (1.7), developer's call:** toast only on failure (reason, Copy details, Show in folder for partial output); no progress/success toast, so no Cancel from the toast until the tray job history (2.10). 1.8 Fixture generator + golden-test harness.
+1.1 FileSniffer + tests. 1.2 capabilities.json + matrix (intersection, disabled reasons). 1.3 OutputNamer + JobQueue (parallel limits, cancel). 1.4 Worker protocol + engine host. 1.5 Imaging conversions + HEIC/WIC detection. 1.6 Video/audio conversions + GIF palette pipeline. 1.7 Toasts (progress, cancel, show in folder). **As built (1.7), developer's call:** toast only on failure (reason, Copy details, Show in folder for partial output); no progress/success toast, so no Cancel from the toast until the tray job history (2.10). 1.8 Fixture generator + golden-test harness. **As built (1.8):** no `expected/*.json`; expectations come from the input fixture (size, dHash, duration, frame size) plus a per-target codec table in `GoldenTests`. Duration tolerance is ±0.1 s rather than ±1 frame (GIF at 15 fps and lossy-audio padding).
 **Demo:** every image↔image, video→MP4/WebM/GIF/MP3, and audio↔audio row of CV-2 from the wheel; batch of 20 images with one grouped toast; cancel a video mid-encode → no file, no ffmpeg in Task Manager; HEIC output disabled with a reason when the HEVC extension is missing.
 
 ### Phase 2 — Documents, PDF, archives, instant tools → **Alpha** (wk 6–9) · CV-2 rest, CV-5, IT-1/2/3/5, JB-5/6

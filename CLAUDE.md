@@ -13,9 +13,9 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 ## Commands (repo root, PowerShell)
 - Native binaries (once after clone, and when a pin changes): `./build/fetch-binaries.ps1` → `artifacts/binaries/` (LGPL ffmpeg/ffprobe; media tests skip without them)
 - Build: `dotnet build Morph.slnx -c Debug` (warnings are errors)
-- Unit + golden tests: `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
+- Unit + golden tests (golden needs `tests/fixtures/`, see next line): `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
 - UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)
-- Regenerate fixtures: `dotnet run build/gen-fixtures.cs`
+- Generate fixtures (once after clone, after fetch-binaries, and when the generator changes): `dotnet run build/gen-fixtures.cs` → `tests/fixtures/` (git-ignored)
 - Run: `dotnet run --project src/Morph.App`
 - Dev signing cert (once): `./build/dev-cert.ps1`, then run the printed `Import-Certificate` line in an elevated PowerShell
 - Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`

@@ -1,7 +1,6 @@
 using ImageMagick;
 
 using Morph.Core.Capabilities;
-using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Engines.Imaging;
 
@@ -48,66 +47,10 @@ public sealed class ImagingEngineTests : IDisposable
         Assert.Contains("notes.jpg", ex.UserMessage, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("png", "jpg")]
-    [InlineData("jpg", "webp")]
-    [InlineData("png", "avif")]
-    [InlineData("png", "tiff")]
-    [InlineData("tiff", "gif")]
-    [InlineData("gif", "bmp")]
-    [InlineData("avif", "png")]
-    [InlineData("webp", "tiff")]
-    [InlineData("bmp", "jpg")]
-    public async Task Converts_between_image_formats(string from, string to)
-    {
-        var input = await Draw($"photo.{from}", from);
-
-        var output = await ConvertAsync(input, to);
-
-        Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(output, TestContext.Current.CancellationToken)).Id);
-        using var result = new MagickImage(output);
-        Assert.Equal((40u, 30u), (result.Width, result.Height));
-    }
-
-    [Fact]
-    public async Task Heic_round_trips_through_windows_when_hevc_is_installed()
-    {
-        Assert.SkipUnless(await SystemCodecs.CanEncodeHeicAsync(), "HEVC Video Extensions not installed");
-        var input = await Draw("photo.png", "png");
-
-        var heic = await ConvertAsync(input, "heic");
-        var back = await ConvertAsync(heic, "jpg");
-
-        Assert.Equal("heic", (await FileSniffer.Instance.DetectAsync(heic, TestContext.Current.CancellationToken)).Id);
-        using var result = new MagickImage(back);
-        Assert.Equal((40u, 30u), (result.Width, result.Height));
-        Assert.True(result.GetPixels().GetPixel(20, 15).ToColor()!.R > 200, "red survives the round trip");
-    }
-
+    // Every format pair, HEIC included, runs through the Worker in GoldenTests.
     [Fact]
     public async Task Probe_answers_without_throwing() =>
         await SystemCodecs.CanEncodeHeicAsync();
-
-    private async Task<string> Draw(string name, string format)
-    {
-        var path = Path.Combine(_dir, name);
-        using var image = new MagickImage(MagickColors.Red, 40, 30);
-        await image.WriteAsync(path, format switch
-        {
-            "jpg" => MagickFormat.Jpeg,
-            "tiff" => MagickFormat.Tiff,
-            var f => Enum.Parse<MagickFormat>(f, ignoreCase: true),
-        }, TestContext.Current.CancellationToken);
-        return path;
-    }
-
-    private async Task<string> ConvertAsync(string input, string to)
-    {
-        var namer = new OutputNamer(_dir);
-        await new ImagingEngine().RunAsync(Job($"convert.{to}", input) with { Parameters = to is "jpg" or "avif" or "heic" ? new() { ["quality"] = 90 } : null },
-            namer, new Progress<JobProgress>(), TestContext.Current.CancellationToken);
-        return namer.CommitAll().Single();
-    }
 
     private JobRequest Job(string tool, string input) => new(Guid.NewGuid(), tool, "imaging", [input], _dir);
 }
