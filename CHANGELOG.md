@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase 1 complete (5 Nov 2026): image, video and audio conversions from the wheel, job queue, failure toasts, golden tests, logging and tray icon.
+
 Phase 0 (spikes) complete: drag wheel, image and video conversion in a sandboxed worker, MSIX packaging.
 
 ### Added
