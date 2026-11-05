@@ -79,6 +79,8 @@ public sealed class ToastHost
         return window;
     }
 
+    private const double Gap = 12; // from the screen edge and between cards
+
     private void Arrange()
     {
         var area = SystemParameters.WorkArea;
@@ -87,9 +89,9 @@ public sealed class ToastHost
         {
             var w = _windows[i];
             var height = double.IsNaN(w.ActualHeight) || w.ActualHeight == 0 ? 120 : w.ActualHeight;
-            w.Left = area.Right - w.Width;
-            w.Top = bottom - height;
-            bottom -= height - 12; // cards overlap their transparent shadow margins
+            w.Left = area.Right - w.Width - Gap;
+            w.Top = bottom - height - Gap;
+            bottom -= height + Gap / 2;
         }
     }
 

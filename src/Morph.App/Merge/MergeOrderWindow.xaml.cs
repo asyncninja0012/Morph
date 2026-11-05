@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
+using Morph.App.Theme;
 using Morph.Core.Formats;
+using Morph.Overlay.Theme;
 
 namespace Morph.App.Merge;
 
@@ -34,6 +36,9 @@ public sealed partial class MergeOrderWindow : Window
     public MergeOrderWindow(IReadOnlyList<string> files)
     {
         InitializeComponent();
+        var dark = MorphGlass.IsDark();
+        MorphTheme.Apply(this, dark, glass: false);
+        SourceInitialized += (_, _) => MorphTheme.Apply(this, dark, MorphGlass.TryApplyBackdrop(this, dark));
         _files = [.. files];
         Render();
         MergeButton.Click += (_, _) =>

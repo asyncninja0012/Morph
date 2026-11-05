@@ -45,6 +45,8 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Async all the way; every long operation takes `CancellationToken` and `IProgress<JobProgress>`. No `.Result`/`.Wait()`. `ConfigureAwait(false)` in Core/Engines/Worker, not in UI projects.
 - Errors: engines throw `EngineException(userMessage, details)`; the queue turns it into a failed `JobResult` with plain-language text. Never swallow exceptions silently; log via `ILogger` (`Morph.Core.Logging.FileLoggerProvider`; logs: tray → Open logs folder).
 - Use built-in .NET/Windows APIs before writing code or adding packages (`System.Text.Json` source-gen, `System.IO.Compression`, `FileSystem.DeleteFile(... SendToRecycleBin)`, WinForms `NotifyIcon`, `Windows.Media.Ocr`).
+- Look: Morph glass (warm frosted glass, Morph orange, light/dark with Windows). Overlay surfaces use `Morph.Overlay.Theme.MorphGlass`; App windows call `MorphTheme.Apply` and use the `MorphSurfaceBrush`/`MorphCardBrush` resources. Inspired by Tangerine's feel, never its exact colours or layout.
+- Look: Morph glass (warm frosted glass, Morph orange, light/dark with Windows). Overlay surfaces use `Morph.Overlay.Theme.MorphGlass`; App windows call `MorphTheme.Apply` and use the `MorphSurfaceBrush`/`MorphCardBrush` resources. Inspired by Tangerine's feel, never its exact colours or layout.
 - Don't reformat code you aren't changing. Keep diffs small.
 
 ## Engines and licences

@@ -37,3 +37,16 @@ STYLESTRUCT
 GlobalLock
 GlobalSize
 GlobalUnlock
+GetDC
+ReleaseDC
+CreateCompatibleDC
+CreateCompatibleBitmap
+SelectObject
+BitBlt
+DeleteObject
+DeleteDC
+DwmSetWindowAttribute
+DwmExtendFrameIntoClientArea
+DWMWINDOWATTRIBUTE
+DWM_SYSTEMBACKDROP_TYPE
+DWM_WINDOW_CORNER_PREFERENCE

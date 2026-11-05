@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Interop;
 
+using Morph.App.Theme;
+using Morph.Overlay.Theme;
+
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
@@ -25,6 +28,10 @@ public sealed partial class ToastWindow : Window
         var exStyle = (WINDOW_EX_STYLE)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE)
             | WINDOW_EX_STYLE.WS_EX_NOACTIVATE | WINDOW_EX_STYLE.WS_EX_TOOLWINDOW;
         PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
+
+        // Never active, so the blur-behind glass rather than the system backdrop (which turns solid when inactive).
+        var dark = MorphGlass.IsDark();
+        MorphTheme.Apply(this, dark, MorphGlass.TryApplyBlur(this, dark, round: true));
     }
 
     public event Action? CloseClicked;

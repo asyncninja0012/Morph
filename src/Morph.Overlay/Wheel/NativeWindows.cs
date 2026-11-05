@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -77,6 +78,35 @@ internal static class NativeWindows
         var x = Math.Clamp(centre.X - size / 2, work.left, Math.Max(work.left, work.right - size));
         var y = Math.Clamp(centre.Y - size / 2, work.top, Math.Max(work.top, work.bottom - size));
         return new RECT(x, y, x + size, y + size);
+    }
+
+    /// <summary>What is on screen inside <paramref name="r"/> right now (physical pixels), for the wheel's frosted glass.</summary>
+    public static BitmapSource? CaptureScreen(RECT r)
+    {
+        var (width, height) = (r.right - r.left, r.bottom - r.top);
+        var screen = PInvoke.GetDC(HWND.Null);
+        var memory = PInvoke.CreateCompatibleDC(screen);
+        var bitmap = PInvoke.CreateCompatibleBitmap(screen, width, height);
+        try
+        {
+            var old = PInvoke.SelectObject(memory, bitmap);
+            var copied = PInvoke.BitBlt(memory, 0, 0, width, height, screen, r.left, r.top, ROP_CODE.SRCCOPY);
+            PInvoke.SelectObject(memory, old);
+            if (!copied)
+            {
+                return null;
+            }
+
+            var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            source.Freeze();
+            return source;
+        }
+        finally
+        {
+            PInvoke.DeleteObject(bitmap);
+            PInvoke.DeleteDC(memory);
+            _ = PInvoke.ReleaseDC(HWND.Null, screen);
+        }
     }
 
     public static System.Drawing.Point CursorPosition() => PInvoke.GetCursorPos(out var p) ? p : default;

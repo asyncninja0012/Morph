@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 2 — next task 2.3.** Phase 1 done (gate passed 5 Nov 2026: developer tested the conversions on the installed MSIX). Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 2 — next task 2.3.** Phase 1 done (gate passed 5 Nov 2026: developer tested the conversions on the installed MSIX). Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Look: **Morph glass** (warm frosted glass + Morph orange, follows light/dark), chosen 5 Nov 2026. Look: **Morph glass** (warm frosted glass + Morph orange, follows light/dark), chosen 5 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
