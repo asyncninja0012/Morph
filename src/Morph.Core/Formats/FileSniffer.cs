@@ -66,6 +66,8 @@ public sealed class FileSniffer : IFileSniffer
             case [(byte)'O', (byte)'g', (byte)'g', (byte)'S', ..]:
                 return h.Length >= 36 && h[28..36].SequenceEqual("OpusHead"u8) ? FileFormat.Opus : FileFormat.Ogg;
             case [(byte)'I', (byte)'D', (byte)'3', ..]: return FileFormat.Mp3;
+            // ASF header object GUID. shortcut: every ASF is WMV; an audio-only .wma would then fail in the media engine.
+            case [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C, ..]: return FileFormat.Wmv;
             case [0x1A, 0x45, 0xDF, 0xA3, ..]: return h[..Math.Min(h.Length, 64)].IndexOf("webm"u8) >= 0 ? FileFormat.Webm : FileFormat.Mkv;
             case [(byte)'P', (byte)'K', 0x03, 0x04, ..]: return OdfFromFirstEntry(h) ?? FileFormat.Zip;
             case [(byte)'P', (byte)'K', 0x05, 0x06, ..]: return FileFormat.Zip; // empty archive

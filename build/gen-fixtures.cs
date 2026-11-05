@@ -61,6 +61,7 @@ string[] tone = ["-f", "lavfi", "-i", "sine=d=1"];
     ("mkv", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "flac"]),
     ("webm", [.. video, .. tone, "-c:v", "libvpx", "-c:a", "libvorbis"]),
     ("avi", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "pcm_s16le"]),
+    ("wmv", [.. video, .. tone, "-c:v", "wmv2", "-c:a", "wmav2"]),
     ("mp3", [.. tone, "-c:a", "libmp3lame"]),
     ("m4a", [.. tone, "-c:a", "aac"]),
     ("wav", [.. tone, "-c:a", "pcm_s16le"]),

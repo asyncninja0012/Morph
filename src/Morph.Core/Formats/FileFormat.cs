@@ -24,6 +24,7 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
     public static readonly FileFormat Mkv = Of("mkv", FileKind.Video, "video/x-matroska");
     public static readonly FileFormat Webm = Of("webm", FileKind.Video, "video/webm");
     public static readonly FileFormat Avi = Of("avi", FileKind.Video, "video/x-msvideo");
+    public static readonly FileFormat Wmv = Of("wmv", FileKind.Video, "video/x-ms-wmv");
 
     public static readonly FileFormat Mp3 = Of("mp3", FileKind.Audio, "audio/mpeg");
     public static readonly FileFormat M4a = Of("m4a", FileKind.Audio, "audio/mp4");
@@ -53,7 +54,7 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
 
     private static readonly Dictionary<string, FileFormat> ByExtension = new FileFormat[]
     {
-        Jpg, Png, Gif, Bmp, Webp, Tiff, Heic, Avif, Mp4, Mov, Mkv, Webm, Avi, Mp3, M4a, Wav, Flac, Ogg, Opus, Pdf,
+        Jpg, Png, Gif, Bmp, Webp, Tiff, Heic, Avif, Mp4, Mov, Mkv, Webm, Avi, Wmv, Mp3, M4a, Wav, Flac, Ogg, Opus, Pdf,
         Docx, Xlsx, Pptx, Odt, Ods, Odp, Txt, Md, Html, Csv, Srt, Vtt, Zip, Tar, Gz,
     }.ToDictionary(f => f.Id);
 

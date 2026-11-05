@@ -25,6 +25,7 @@ public sealed class GoldenTests : IDisposable
     {
         ["mp4"] = ["h264", "aac"],
         ["webm"] = ["vp9", "opus"],
+        ["avi"] = ["mpeg4", "mp3"],
         ["gif"] = ["gif"],
         ["mp3"] = ["mp3"],
         ["m4a"] = ["aac"],
@@ -72,7 +73,7 @@ public sealed class GoldenTests : IDisposable
         if (engine == "media")
         {
             Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
-            Assert.SkipWhen(to == "mp4" && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+            Assert.SkipWhen((to == "mp4" || (to == "mkv" && from == "wmv")) && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
         }
 
         var input = Path.Combine(_dir, Path.GetFileName(fixture));
@@ -93,7 +94,7 @@ public sealed class GoldenTests : IDisposable
         }
         else
         {
-            await AssertSameMediaAsync(input, output, to, ct);
+            await AssertSameMediaAsync(input, output, from, to, ct);
         }
     }
 
@@ -126,12 +127,13 @@ public sealed class GoldenTests : IDisposable
         return hash;
     }
 
-    private async Task AssertSameMediaAsync(string input, string output, string to, CancellationToken ct)
+    private async Task AssertSameMediaAsync(string input, string output, string from, string to, CancellationToken ct)
     {
-        var (inDuration, inSize, _) = await ProbeAsync(input, ct);
+        var (inDuration, inSize, inCodecs) = await ProbeAsync(input, ct);
         var (outDuration, outSize, codecs) = await ProbeAsync(output, ct);
 
-        Assert.Equal(Codecs[to], codecs);
+        // MKV holds every fixture's codecs except WMV's, so it copies them; WMV gets H.264 + AAC.
+        Assert.Equal(to != "mkv" ? Codecs[to] : from == "wmv" ? ["h264", "aac"] : inCodecs, codecs);
         // ±0.1 s: one GIF frame at 15 fps is 0.067 s, and lossy audio adds up to a codec frame of padding.
         Assert.InRange(outDuration, inDuration - 0.1, inDuration + 0.1);
         if (inSize is not null && outSize is not null)
@@ -143,12 +145,16 @@ public sealed class GoldenTests : IDisposable
     private async Task<(double Duration, string? Size, string[] Codecs)> ProbeAsync(string path, CancellationToken ct)
     {
         var (exit, stdout, stderr) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath,
-            ["-v", "error", "-show_entries", "stream=codec_name,width,height:format=duration", "-of", "csv=p=0", path], null, ct);
+            ["-v", "error", "-show_entries", "stream=codec_name,width,height,duration:format=duration", "-of", "csv=p=0", path], null, ct);
         Assert.True(exit == 0, stderr);
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var streams = lines[..^1].Select(l => l.Split(',')).ToList();
         var size = streams.Where(s => s.Length >= 3 && s[1].Length > 0).Select(s => $"{s[1]}x{s[2]}").FirstOrDefault();
-        return (double.Parse(lines[^1], CultureInfo.InvariantCulture), size, [.. streams.Select(s => s[0])]);
+        // The shortest stream, not the container: ASF (WMV) adds its preroll to the container duration. GIF streams have none.
+        var durations = streams.Select(s => double.TryParse(s[^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : double.NaN)
+            .Where(d => !double.IsNaN(d)).ToList();
+        var duration = durations.Count > 0 ? durations.Min() : double.Parse(lines[^1], CultureInfo.InvariantCulture);
+        return (duration, size, [.. streams.Select(s => s[0])]);
     }
 
     private static string RepoRoot()
