@@ -4,6 +4,7 @@ using System.Windows;
 
 using Microsoft.Extensions.Logging;
 
+using Morph.App.Merge;
 using Morph.App.Toasts;
 using Morph.App.Tray;
 using Morph.Core.Capabilities;
@@ -154,6 +155,25 @@ public sealed partial class App : Application
             return;
         }
 
+        // Merge asks for the page order first; nothing runs if the window is closed.
+        if (item.Id == "merge" && files.Paths.Count > 1)
+        {
+            var order = new MergeOrderWindow(files.Paths);
+            order.MergeClicked += ordered =>
+            {
+                _log.LogInformation("Merge order: {Files}", string.Join(", ", ordered));
+                Enqueue(item, files with { Paths = ordered });
+            };
+            order.Show();
+            order.Activate();
+            return;
+        }
+
+        Enqueue(item, files);
+    }
+
+    private void Enqueue(WheelItem item, DroppedFiles files)
+    {
         // Files already in the target format are skipped. Output goes next to each original; virtual files
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
         // Merge makes one file, so it's one job, saved next to the first file.
