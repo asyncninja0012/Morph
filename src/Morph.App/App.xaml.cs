@@ -26,7 +26,7 @@ public sealed partial class App : Application
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
     // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land.
-    private static readonly WheelItem[] ToolItems =
+    private static readonly WheelItem[] PlaceholderTools =
     [
         new("compress", "Compress", ""), new("resize", "Resize", ""), new("rotate", "Rotate", ""),
         new("crop", "Crop", ""), new("strip-metadata", "Strip info", ""), new("ocr", "Text (OCR)", ""),
@@ -82,8 +82,8 @@ public sealed partial class App : Application
         _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
         {
-            ModifierKey.Shift => ConvertItems(files),
-            ModifierKey.Ctrl => ToolItems,
+            ModifierKey.Shift => MatrixItems(files, WheelGroup.Convert),
+            ModifierKey.Ctrl => [.. MatrixItems(files, WheelGroup.Tools), .. PlaceholderTools],
             _ => ActionItems,
         });
         _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
@@ -137,18 +137,18 @@ public sealed partial class App : Application
     // The Worker sniffs the real format and refuses a file that isn't what its extension says.
     // Options this PC can't run (e.g. HEIC output without HEVC) are left out rather than shown disabled.
     // shortcut: beta isn't drawn yet (no row is beta until PDF → DOCX in Phase 2).
-    private static IReadOnlyList<WheelItem> ConvertItems(IReadOnlyList<string> files) =>
+    private static IReadOnlyList<WheelItem> MatrixItems(IReadOnlyList<string> files, WheelGroup wheel) =>
     [
-        .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], WheelGroup.Convert)
+        .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], wheel)
             .Where(o => o.DisabledReason is null)
             .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
     ];
 
-    // shortcut: conversions only; Tools/Actions wedges still just log.
+    // shortcut: capabilities.json tools only; the placeholder Tools and the Actions wedges still just log.
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
-        if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
+        if (Matrix.Tool(item.Id) is null || files.Paths.Count == 0)
         {
             _log.LogInformation("{Tool} isn't wired up yet", item.Id);
             return;
@@ -156,10 +156,12 @@ public sealed partial class App : Application
 
         // Files already in the target format are skipped. Output goes next to each original; virtual files
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
+        // Merge makes one file, so it's one job, saved next to the first file.
+        var merge = item.Id == "merge";
         var jobs = files.Paths
             .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
             .Where(f => f.Row is not null)
-            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(f.Path)!))
+            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!))
             .Select(g => new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
                 Matrix.Tool(item.Id)?.Defaults?.DeepClone().AsObject()))
             .Select(r => (r, Jobs.Enqueue(r)))

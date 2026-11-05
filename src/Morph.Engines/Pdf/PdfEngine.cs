@@ -6,11 +6,14 @@ using ImageMagick;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
 
+using PdfSharp.Pdf;
+
 namespace Morph.Engines.Pdf;
 
 /// <summary>
 /// PDF → JPG/PNG (one image per page at 150 DPI) and PDF → TXT (CV-2) with PDFium. Tool ids: convert.jpg/png/txt.
 /// A multi-page PDF gives report-1.png, report-2.png, ... next to the original.
+/// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>.
 /// </summary>
 public sealed class PdfEngine : IEngine
 {
@@ -22,6 +25,12 @@ public sealed class PdfEngine : IEngine
 
     public async Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
+        if (job.ToolId is "convert.pdf" or "merge")
+        {
+            await BuildAsync(job, namer, progress, ct).ConfigureAwait(false);
+            return;
+        }
+
         var target = job.ToolId switch
         {
             "convert.jpg" => MagickFormat.Jpeg,
@@ -44,6 +53,38 @@ public sealed class PdfEngine : IEngine
             {
                 Convert(input, target, quality, namer, f => progress.Report(new JobProgress((done + f) / job.Inputs.Count, null)), ct);
             }
+        }
+    }
+
+    // convert.pdf: one PDF per image. merge: one PDF of every input, named after the first (report-merged.pdf).
+    private static async Task BuildAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var merge = job.ToolId == "merge";
+        var document = new PdfDocument();
+        try
+        {
+            for (var i = 0; i < job.Inputs.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                await PdfBuilder.AddAsync(document, job.Inputs[i], ct).ConfigureAwait(false);
+                if (!merge)
+                {
+                    document.Save(namer.Reserve(job.Inputs[i], ".pdf").Path);
+                    document.Dispose();
+                    document = new PdfDocument();
+                }
+
+                progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+            }
+
+            if (merge)
+            {
+                document.Save(namer.Reserve(job.Inputs[0], ".pdf", "-merged").Path);
+            }
+        }
+        finally
+        {
+            document.Dispose();
         }
     }
 

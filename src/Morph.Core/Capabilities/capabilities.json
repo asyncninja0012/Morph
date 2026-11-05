@@ -18,7 +18,9 @@
     {"id": "convert.ogg", "label": "OGG", "glyph": "", "hint": "Convert to OGG", "wheel": "Convert"},
     {"id": "convert.opus", "label": "Opus", "glyph": "", "hint": "Convert to Opus", "wheel": "Convert"},
     {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"},
-    {"id": "convert.txt", "label": "TXT", "glyph": "", "hint": "Extract the text to TXT", "wheel": "Convert"}
+    {"id": "convert.txt", "label": "TXT", "glyph": "", "hint": "Extract the text to TXT", "wheel": "Convert"},
+    {"id": "convert.pdf", "label": "PDF", "glyph": "", "hint": "Convert to PDF", "wheel": "Convert"},
+    {"id": "merge", "label": "Merge", "glyph": "", "hint": "Merge into one PDF, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
     "hevc-ext": {"reason": "Needs HEVC Video Extensions."}
@@ -144,6 +146,23 @@
     {"in": "ogg", "out": "opus", "tool": "convert", "engine": "media"},
     {"in": "pdf", "out": "jpg", "tool": "convert", "engine": "pdf"},
     {"in": "pdf", "out": "png", "tool": "convert", "engine": "pdf"},
-    {"in": "pdf", "out": "txt", "tool": "convert", "engine": "pdf"}
+    {"in": "pdf", "out": "txt", "tool": "convert", "engine": "pdf"},
+    {"in": "jpg", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "png", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "webp", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "gif", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "bmp", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "tiff", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "heic", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "avif", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "pdf", "tool": "merge", "engine": "pdf"},
+    {"in": "jpg", "tool": "merge", "engine": "pdf"},
+    {"in": "png", "tool": "merge", "engine": "pdf"},
+    {"in": "webp", "tool": "merge", "engine": "pdf"},
+    {"in": "gif", "tool": "merge", "engine": "pdf"},
+    {"in": "bmp", "tool": "merge", "engine": "pdf"},
+    {"in": "tiff", "tool": "merge", "engine": "pdf"},
+    {"in": "heic", "tool": "merge", "engine": "pdf"},
+    {"in": "avif", "tool": "merge", "engine": "pdf"}
   ]
 }

@@ -19,13 +19,13 @@ public sealed class CapabilityMatrixTests
             Assert.True(r.Out is null || FileFormat.FromExtension(r.Out).Id == r.Out, $"unknown output format {r.Out}");
             Assert.NotEqual(r.In, r.Out);
         });
-        Assert.All(Shipped.OptionsFor([], WheelGroup.Convert), o => Assert.Contains(Shipped.Rows, r => r.ToolId == o.Tool.Id));
+        Assert.All(Shipped.OptionsFor([], WheelGroup.Convert).Concat(Shipped.OptionsFor([], WheelGroup.Tools)), o => Assert.Contains(Shipped.Rows, r => r.ToolId == o.Tool.Id));
     }
 
     [Fact]
     public void Options_fit_every_file()
     {
-        Assert.Equal(["convert.png", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.gif", "convert.bmp"], Ids([FileFormat.Jpg]));
+        Assert.Equal(["convert.png", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.gif", "convert.bmp", "convert.pdf"], Ids([FileFormat.Jpg]));
         Assert.Contains("convert.jpg", Ids([FileFormat.Heic, FileFormat.Avif]));
         Assert.Equal(["convert.mp4", "convert.webm", "convert.mkv", "convert.avi", "convert.gif", "convert.mp3"], Ids([FileFormat.Mov]));
         Assert.Equal(["convert.mp4", "convert.webm", "convert.mkv", "convert.avi", "convert.gif", "convert.mp3"], Ids([FileFormat.Wmv]));
@@ -33,7 +33,7 @@ public sealed class CapabilityMatrixTests
         Assert.Equal(["convert.mp3", "convert.m4a", "convert.wav", "convert.ogg", "convert.opus"], Ids([FileFormat.Flac]));
         Assert.Equal(["convert.gif"], Ids([FileFormat.Jpg, FileFormat.Mov])); // imaging and media rows, one job each
         Assert.Equal(["convert.png", "convert.jpg", "convert.txt"], Ids([FileFormat.Pdf]));
-        Assert.Equal(["convert.png", "convert.jpg"], Ids([FileFormat.Pdf, FileFormat.Jpg])); // pdf and imaging rows, one job each
+        Assert.Equal(["convert.png", "convert.jpg", "convert.pdf"], Ids([FileFormat.Pdf, FileFormat.Jpg])); // pdf and imaging rows, one job each
         Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Wav]));
         Assert.Empty(Ids([FileFormat.Unknown]));
     }
@@ -50,7 +50,17 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void No_files_offers_every_tool_of_the_wheel() =>
         Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.webm", "convert.mkv", "convert.avi",
-            "convert.gif", "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp", "convert.txt"], Ids([]));
+            "convert.gif", "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp", "convert.txt", "convert.pdf"], Ids([]));
+
+    [Fact]
+    public void Merge_needs_two_files_it_can_put_in_a_pdf()
+    {
+        Assert.Empty(Ids([FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["merge"], Ids([FileFormat.Heic, FileFormat.Pdf, FileFormat.Png], WheelGroup.Tools));
+        Assert.Empty(Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
+        Assert.Equal(["merge"], Ids([], WheelGroup.Tools));
+    }
 
     [Fact]
     public void Heic_output_is_disabled_without_hevc()
@@ -102,7 +112,7 @@ public sealed class CapabilityMatrixTests
     public void Misspelt_field_is_rejected() =>
         Assert.ThrowsAny<JsonException>(() => Load("""{ "tools": [], "requirements": {}, "rows": [], "row": [] }""", _ => true));
 
-    private static string[] Ids(FileFormat[] files) => [.. Shipped.OptionsFor(files, WheelGroup.Convert).Select(o => o.Tool.Id)];
+    private static string[] Ids(FileFormat[] files, WheelGroup wheel = WheelGroup.Convert) => [.. Shipped.OptionsFor(files, wheel).Select(o => o.Tool.Id)];
 
     private static CapabilityMatrix Load(string json, Func<string, bool> isAvailable) =>
         CapabilityMatrix.Load(new MemoryStream(Encoding.UTF8.GetBytes(json)), isAvailable);

@@ -13,7 +13,8 @@ namespace Morph.Engines.Tests;
 /// <summary>
 /// One case per conversion row in capabilities.json (PLAN §8), so a new row without a fixture fails. Each runs the real
 /// Morph.Worker.exe on tests/fixtures/sample.&lt;in&gt; with the tool's defaults, like a drop does, and checks the output:
-/// sniffed format; images keep size and look (dHash, Hamming ≤ 6); media keep duration, frame size and get the target codecs.
+/// sniffed format; images keep size and look (dHash, Hamming ≤ 6); media keep duration, frame size and get the target codecs;
+/// images → PDF render back to the same look.
 /// </summary>
 public sealed class GoldenTests : IDisposable
 {
@@ -80,12 +81,7 @@ public sealed class GoldenTests : IDisposable
         File.Copy(fixture, input);
         Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(input, ct)).Id);
 
-        var tool = $"convert.{to}";
-        var result = await WorkerClient.RunAsync(WorkerPath,
-            new JobRequest(Guid.NewGuid(), tool, engine, [input], _dir, Matrix.Tool(tool)?.Defaults?.DeepClone().AsObject()),
-            new SyncProgress<JobProgress>(_ => { }), ct);
-
-        Assert.True(result.Status == JobStatus.Succeeded, $"{result.UserMessage} {result.Details}");
+        var result = await RunAsync($"convert.{to}", engine, [input], ct);
         if (from == "pdf")
         {
             await AssertPdfPagesAsync(result.Outputs, to, ct);
@@ -94,7 +90,12 @@ public sealed class GoldenTests : IDisposable
 
         var output = Assert.Single(result.Outputs);
         Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
-        if (FileFormat.FromExtension(from).Kind == FileKind.Image)
+        if (to == "pdf")
+        {
+            var pages = await RenderAsync(output, ct);
+            AssertLooksTheSame(input, Assert.Single(pages), sameSize: false);
+        }
+        else if (FileFormat.FromExtension(from).Kind == FileKind.Image)
         {
             AssertLooksTheSame(input, output);
         }
@@ -104,8 +105,42 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Merge_puts_pdfs_and_images_into_one_pdf_in_order()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var inputs = new[] { "png", "pdf", "jpg" }.Select(f => Path.Combine(_dir, $"sample.{f}")).ToArray();
+        foreach (var input in inputs)
+        {
+            Assert.True(File.Exists(Path.Combine(Fixtures, Path.GetFileName(input))), "Run: dotnet run build/gen-fixtures.cs");
+            File.Copy(Path.Combine(Fixtures, Path.GetFileName(input)), input);
+        }
+
+        var merged = Assert.Single((await RunAsync("merge", "pdf", inputs, ct)).Outputs);
+        Assert.Equal(Path.Combine(_dir, "sample-merged.pdf"), merged);
+
+        var pages = await RenderAsync(merged, ct);
+        Assert.Equal(4, pages.Count);
+        AssertLooksTheSame(inputs[0], pages[0], sameSize: false);
+        await AssertPdfPagesAsync(pages.Skip(1).Take(2).ToList(), "png", ct, checkNames: false);
+        AssertLooksTheSame(inputs[2], pages[3], sameSize: false);
+    }
+
+    private async Task<JobResult> RunAsync(string tool, string engine, string[] inputs, CancellationToken ct)
+    {
+        var result = await WorkerClient.RunAsync(WorkerPath,
+            new JobRequest(Guid.NewGuid(), tool, engine, inputs, _dir, Matrix.Tool(tool)?.Defaults?.DeepClone().AsObject()),
+            new SyncProgress<JobProgress>(_ => { }), ct);
+        Assert.True(result.Status == JobStatus.Succeeded, $"{result.UserMessage} {result.Details}");
+        return result;
+    }
+
+    // Each page of a PDF as a PNG, through the PDFium path that golden-tests itself above.
+    private async Task<IReadOnlyList<string>> RenderAsync(string pdf, CancellationToken ct) =>
+        (await RunAsync("convert.png", "pdf", [pdf], ct)).Outputs;
+
     // sample.pdf: two 216×144 pt pages, each with a red box (10,80)-(70,130) pt and "Morph sample page N".
-    private async Task AssertPdfPagesAsync(IReadOnlyList<string> outputs, string to, CancellationToken ct)
+    private async Task AssertPdfPagesAsync(IReadOnlyList<string> outputs, string to, CancellationToken ct, bool checkNames = true)
     {
         if (to == "txt")
         {
@@ -115,7 +150,12 @@ public sealed class GoldenTests : IDisposable
             return;
         }
 
-        Assert.Equal([Path.Combine(_dir, $"sample-1.{to}"), Path.Combine(_dir, $"sample-2.{to}")], outputs);
+        if (checkNames)
+        {
+            Assert.Equal([Path.Combine(_dir, $"sample-1.{to}"), Path.Combine(_dir, $"sample-2.{to}")], outputs);
+        }
+
+        Assert.Equal(2, outputs.Count);
         foreach (var page in outputs)
         {
             Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(page, ct)).Id);
@@ -126,11 +166,20 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
-    private static void AssertLooksTheSame(string input, string output)
+    // sameSize false: a PDF page rendered back to pixels, so only the aspect ratio has to match.
+    private static void AssertLooksTheSame(string input, string output, bool sameSize = true)
     {
         using var a = new MagickImage(input);
         using var b = new MagickImage(output);
-        Assert.Equal((a.Width, a.Height), (b.Width, b.Height));
+        if (sameSize)
+        {
+            Assert.Equal((a.Width, a.Height), (b.Width, b.Height));
+        }
+        else
+        {
+            Assert.Equal((double)a.Width / a.Height, (double)b.Width / b.Height, 0.02);
+        }
+
         var distance = BitOperations.PopCount(DHash(a) ^ DHash(b));
         Assert.True(distance <= 6, $"dHash distance {distance}");
     }

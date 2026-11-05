@@ -57,20 +57,7 @@ public sealed class ImagingEngine : IEngine
         {
             ct.ThrowIfCancellationRequested();
             var input = job.Inputs[i];
-            var sniffed = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
-            await using var source = new FileStream(input, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
-                4096, FileOptions.Asynchronous);
-
-            // The format comes from magic bytes, never from Magick's own detection, so a hostile file can't reach
-            // script-like coders (MVG, MSL, SVG, PS).
-            if (!Readable.TryGetValue(sniffed.Id, out var inFormat))
-            {
-                throw new EngineException($"{Path.GetFileName(input)} isn't an image Morph can read.");
-            }
-
-            using var image = new MagickImage();
-            await image.ReadAsync(source, new MagickReadSettings { Format = inFormat }, ct).ConfigureAwait(false);
-            image.AutoOrient(); // phone photos store rotation in EXIF; formats without EXIF would show them sideways
+            using var image = await ReadAsync(input, ct).ConfigureAwait(false);
             if (outFormat is MagickFormat.Jpeg or MagickFormat.Bmp or MagickFormat.Heic)
             {
                 image.BackgroundColor = MagickColors.White;
@@ -95,6 +82,34 @@ public sealed class ImagingEngine : IEngine
             }
 
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+    }
+
+    /// <summary>Reads the first frame of an image, upright. Also used to put images into PDFs.</summary>
+    internal static async Task<MagickImage> ReadAsync(string input, CancellationToken ct)
+    {
+        var sniffed = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+
+        // The format comes from magic bytes, never from Magick's own detection, so a hostile file can't reach
+        // script-like coders (MVG, MSL, SVG, PS).
+        if (!Readable.TryGetValue(sniffed.Id, out var inFormat))
+        {
+            throw new EngineException($"{Path.GetFileName(input)} isn't an image Morph can read.");
+        }
+
+        await using var source = new FileStream(input, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            4096, FileOptions.Asynchronous);
+        var image = new MagickImage();
+        try
+        {
+            await image.ReadAsync(source, new MagickReadSettings { Format = inFormat }, ct).ConfigureAwait(false);
+            image.AutoOrient(); // phone photos store rotation in EXIF; formats without EXIF would show them sideways
+            return image;
+        }
+        catch
+        {
+            image.Dispose();
+            throw;
         }
     }
 }

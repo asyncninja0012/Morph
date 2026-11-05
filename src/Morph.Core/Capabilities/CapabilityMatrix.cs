@@ -11,7 +11,9 @@ public enum WheelGroup { Convert, Tools, Actions }
 /// <summary>One wedge's identity. <paramref name="Glyph"/> is a Segoe Fluent Icons character; <paramref name="Hint"/> the hover text.</summary>
 /// <param name="Id">"convert.png", "compress", "action.copy-path".</param>
 /// <param name="Defaults">Engine parameters used unless settings say otherwise (CV-4), e.g. { "quality": 90 }. Per tool, so per output format.</param>
-public sealed record ToolDescriptor(string Id, string Label, string Glyph, string Hint, WheelGroup Wheel, JsonObject? Defaults = null);
+/// <param name="MinFiles">Fewest files the tool makes sense for; 2 for merge.</param>
+public sealed record ToolDescriptor(string Id, string Label, string Glyph, string Hint, WheelGroup Wheel, JsonObject? Defaults = null,
+    int MinFiles = 1);
 
 /// <summary>One row of <c>capabilities.json</c> (CV-3): this input format can run this tool with this engine.</summary>
 /// <param name="Out">Output format id for conversions; null for tools that keep the format.</param>
@@ -79,7 +81,7 @@ public sealed class CapabilityMatrix
         foreach (var tool in _tools.Where(t => t.Wheel == wheel))
         {
             var target = tool.Id.StartsWith("convert.", StringComparison.Ordinal) ? tool.Id["convert.".Length..] : null;
-            if (files.Count > 0 && files.All(f => f.Id == target))
+            if (files.Count > 0 && (files.Count < tool.MinFiles || files.All(f => f.Id == target)))
             {
                 continue;
             }
