@@ -6,6 +6,7 @@ using ImageMagick;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
+using Morph.Engines.Documents;
 using Morph.Engines.Media;
 
 namespace Morph.Engines.Tests;
@@ -90,7 +91,11 @@ public sealed class GoldenTests : IDisposable
 
         var output = Assert.Single(result.Outputs);
         Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
-        if (to == "pdf")
+        if (engine == "document")
+        {
+            await AssertSameDocumentAsync(input, output, from, to, ct);
+        }
+        else if (to == "pdf")
         {
             var pages = await RenderAsync(output, ct);
             AssertLooksTheSame(input, Assert.Single(pages), sameSize: false);
@@ -203,6 +208,54 @@ public sealed class GoldenTests : IDisposable
 
         return hash;
     }
+
+    // The sample documents hold the same content (gen-fixtures); TXT keeps only the words.
+    private static async Task AssertSameDocumentAsync(string input, string output, string from, string to, CancellationToken ct)
+    {
+        var actual = await DocumentEngine.ReadAsync(output, ct);
+        if (from == "txt" || to == "txt")
+        {
+            var text = Runs.Plain(actual);
+            foreach (var phrase in new[] { "Morph sample", "Plain text with bold", "First item", "Nested item", "Two", "Cell B2", "var x = 1;" })
+            {
+                Assert.Contains(phrase, text, StringComparison.Ordinal);
+            }
+
+            return;
+        }
+
+        Assert.Equal(Shape(await DocumentEngine.ReadAsync(input, ct)), Shape(actual));
+        Assert.Equal(SampleShape.ReplaceLineEndings("\n"), Shape(actual));
+    }
+
+    private const string SampleShape = """
+        H1 Morph sample
+        P Plain text with **bold**, *italic*, `code` and a [link](https://example.com/).
+        UL[P First item; P Second item UL[P Nested item]]
+        OL[P One; P Two]
+        T Name | Value / Cell A2 | Cell B2
+        C var x = 1;
+        """;
+
+    private static string Shape(IEnumerable<Block> blocks) => string.Join('\n', blocks.Select(Shape));
+
+    private static string Shape(Block block) => block switch
+    {
+        Heading h => $"H{h.Level} {Shape(h.Runs)}",
+        Paragraph p => "P " + Shape(p.Runs),
+        ListBlock l => (l.Ordered ? "OL[" : "UL[") + string.Join("; ", l.Items.Select(i => string.Join(" ", i.Select(Shape)))) + "]",
+        Table t => "T " + string.Join(" / ", t.Rows.Select(r => string.Join(" | ", r.Select(Runs.Plain)))),
+        CodeBlock c => "C " + c.Text.Trim(),
+        _ => block.ToString(),
+    };
+
+    private static string Shape(IEnumerable<Run> runs) => string.Concat(runs.Select(r =>
+    {
+        var s = r.Code ? $"`{r.Text}`" : r.Text;
+        s = r.Italic ? $"*{s}*" : s;
+        s = r.Bold ? $"**{s}**" : s;
+        return r.Link is { } link ? $"[{s}]({link})" : s;
+    }));
 
     private async Task AssertSameMediaAsync(string input, string output, string from, string to, CancellationToken ct)
     {

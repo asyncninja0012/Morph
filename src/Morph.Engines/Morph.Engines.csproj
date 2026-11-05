@@ -6,7 +6,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
+    <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="Magick.NET-Q8-x64" />
+    <PackageReference Include="Markdig" />
     <PackageReference Include="PDFsharp" />
     <InternalsVisibleTo Include="Morph.Engines.Tests" />
   </ItemGroup>

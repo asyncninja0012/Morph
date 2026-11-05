@@ -33,6 +33,18 @@ Microsoft.Extensions.Logging.Abstractions 10.0.0
 https://github.com/dotnet/dotnet
 Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)
 --------------------------------------------------------------------------------
+DocumentFormat.OpenXml 3.5.1 (with DocumentFormat.OpenXml.Framework 3.5.1)
+https://github.com/dotnet/Open-XML-SDK
+Licence: MIT (https://github.com/dotnet/Open-XML-SDK/blob/main/LICENSE)
+--------------------------------------------------------------------------------
+System.IO.Packaging 10.0.2 (used by DocumentFormat.OpenXml)
+https://github.com/dotnet/dotnet
+Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)
+--------------------------------------------------------------------------------
+Markdig 1.6.0
+https://github.com/xoofx/markdig
+Licence: BSD-2-Clause (https://github.com/xoofx/markdig/blob/main/license.txt)
+--------------------------------------------------------------------------------
 PDFsharp 6.2.4
 https://github.com/empira/PDFsharp
 Licence: MIT (https://github.com/empira/PDFsharp/blob/master/LICENSE)

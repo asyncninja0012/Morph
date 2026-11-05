@@ -1,0 +1,87 @@
+using System.Text;
+
+using Morph.Core.Formats;
+using Morph.Core.Jobs;
+
+namespace Morph.Engines.Documents;
+
+/// <summary>
+/// DOCX, Markdown, HTML and TXT among each other (CV-2, task 2.3). Every input is read into the <see cref="Block"/> tree (Doc.cs),
+/// then written out. Tool ids: convert.docx/md/html/txt.
+/// </summary>
+public sealed class DocumentEngine : IEngine
+{
+    private const long MaxBytes = 50L * 1024 * 1024; // a text document this large is almost certainly not one
+
+    public string Id => "document";
+
+    public async Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var target = job.ToolId switch
+        {
+            "convert.docx" or "convert.md" or "convert.html" or "convert.txt" => job.ToolId["convert.".Length..],
+            _ => throw new EngineException("This conversion isn't available yet.", $"document: unsupported tool {job.ToolId}"),
+        };
+
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var input = job.Inputs[i];
+            var blocks = await ReadAsync(input, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(Runs.Plain(blocks)))
+            {
+                throw new EngineException($"{Path.GetFileName(input)} has no text to convert.");
+            }
+
+            var output = namer.Reserve(input, "." + target).Path;
+            if (target == "docx")
+            {
+                DocxWriter.Write(blocks, output);
+            }
+            else
+            {
+                var text = target switch
+                {
+                    "md" => MarkdownWriter.Write(blocks),
+                    "html" => HtmlWriter.Write(blocks, Path.GetFileNameWithoutExtension(input)),
+                    _ => PlainTextWriter.Write(blocks),
+                };
+                await File.WriteAllTextAsync(output, text, new UTF8Encoding(false), ct).ConfigureAwait(false); // UTF-8, no BOM
+            }
+
+            progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+    }
+
+    internal static async Task<List<Block>> ReadAsync(string input, CancellationToken ct)
+    {
+        var name = Path.GetFileName(input);
+        var format = (await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id;
+        if (new FileInfo(input).Length > MaxBytes)
+        {
+            throw new EngineException($"{name} is over {MaxBytes / 1024 / 1024} MB; Morph converts documents up to that size.");
+        }
+
+        if (format == "docx")
+        {
+            try
+            {
+                return DocxReader.Read(input);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not EngineException)
+            {
+                throw new EngineException($"{name} is damaged or isn't a Word document Morph can read.", ex.ToString());
+            }
+        }
+
+        // File.ReadAllText honours a BOM (UTF-8/16/32) and otherwise reads UTF-8.
+        var text = (await File.ReadAllTextAsync(input, ct).ConfigureAwait(false)).ReplaceLineEndings("\n");
+        return format switch
+        {
+            "md" => MarkdownReader.Read(text),
+            "html" => HtmlReader.Read(text),
+            "txt" => PlainTextReader.Read(text),
+            _ => throw new EngineException($"{name} isn't a document Morph can convert.", $"document: input format {format}"),
+        };
+    }
+}

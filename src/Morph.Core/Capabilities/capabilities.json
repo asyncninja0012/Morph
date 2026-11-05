@@ -20,6 +20,9 @@
     {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"},
     {"id": "convert.txt", "label": "TXT", "glyph": "", "hint": "Extract the text to TXT", "wheel": "Convert"},
     {"id": "convert.pdf", "label": "PDF", "glyph": "", "hint": "Convert to PDF", "wheel": "Convert"},
+    {"id": "convert.docx", "label": "DOCX", "glyph": "", "hint": "Convert to a Word document", "wheel": "Convert"},
+    {"id": "convert.md", "label": "MD", "glyph": "", "hint": "Convert to Markdown", "wheel": "Convert"},
+    {"id": "convert.html", "label": "HTML", "glyph": "", "hint": "Convert to a web page", "wheel": "Convert"},
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Merge into one PDF, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
@@ -163,6 +166,18 @@
     {"in": "bmp", "tool": "merge", "engine": "pdf"},
     {"in": "tiff", "tool": "merge", "engine": "pdf"},
     {"in": "heic", "tool": "merge", "engine": "pdf"},
-    {"in": "avif", "tool": "merge", "engine": "pdf"}
+    {"in": "avif", "tool": "merge", "engine": "pdf"},
+    {"in": "docx", "out": "md", "tool": "convert", "engine": "document"},
+    {"in": "docx", "out": "html", "tool": "convert", "engine": "document"},
+    {"in": "docx", "out": "txt", "tool": "convert", "engine": "document"},
+    {"in": "md", "out": "docx", "tool": "convert", "engine": "document"},
+    {"in": "md", "out": "html", "tool": "convert", "engine": "document"},
+    {"in": "md", "out": "txt", "tool": "convert", "engine": "document"},
+    {"in": "html", "out": "docx", "tool": "convert", "engine": "document"},
+    {"in": "html", "out": "md", "tool": "convert", "engine": "document"},
+    {"in": "html", "out": "txt", "tool": "convert", "engine": "document"},
+    {"in": "txt", "out": "docx", "tool": "convert", "engine": "document"},
+    {"in": "txt", "out": "md", "tool": "convert", "engine": "document"},
+    {"in": "txt", "out": "html", "tool": "convert", "engine": "document"}
   ]
 }

@@ -113,5 +113,97 @@ offsets.ForEach(o => pdf.Append($"{o:D10} 00000 n \n"));
 pdf.Append($"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
 File.WriteAllText(Path.Combine(dir, "sample.pdf"), pdf.ToString(), System.Text.Encoding.ASCII);
 
+// Documents: the same content in each format: a heading, a paragraph with bold/italic/code/link, a bullet list with a nested item,
+// a numbered list, a 2×2 table and a code block. The DOCX is written by hand, the way Word lays it out, not by Morph's writer.
+File.WriteAllText(Path.Combine(dir, "sample.md"), """
+    # Morph sample
+
+    Plain text with **bold**, *italic*, `code` and a [link](https://example.com/).
+
+    - First item
+    - Second item
+      - Nested item
+
+    1. One
+    2. Two
+
+    | Name | Value |
+    | --- | --- |
+    | Cell A2 | Cell B2 |
+
+    ```
+    var x = 1;
+    ```
+
+    """);
+File.WriteAllText(Path.Combine(dir, "sample.html"), """
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><title>Ignored title</title><style>p { color: red }</style><script>var hidden = 1;</script></head>
+    <body>
+    <h1>Morph sample</h1>
+    <p>Plain text with <strong>bold</strong>, <em>italic</em>, <code>code</code> and a <a href="https://example.com/">link</a>.</p>
+    <ul>
+      <li>First item</li>
+      <li>Second item
+        <ul><li>Nested item</li></ul>
+      </li>
+    </ul>
+    <ol><li>One</li><li>Two</li></ol>
+    <table><tr><th>Name</th><th>Value</th></tr><tr><td>Cell A2</td><td>Cell B2</td></tr></table>
+    <pre><code>var x = 1;</code></pre>
+    </body></html>
+    """);
+File.WriteAllText(Path.Combine(dir, "sample.txt"), "Morph sample\r\n\r\nPlain text with bold, italic, code and a link.\r\n\r\nFirst item\r\nSecond item\r\nNested item\r\n\r\nOne\r\nTwo\r\n\r\nName\tValue\r\nCell A2\tCell B2\r\n\r\nvar x = 1;\r\n");
+
+const string W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+string Para(string body, string? style = null, int? num = null, int level = 0) =>
+    "<w:p>" + (style ?? (num is null ? null : "ListParagraph")) switch
+    {
+        null => "",
+        var s => $"<w:pPr><w:pStyle w:val=\"{s}\"/>" + (num is null ? "" : $"<w:numPr><w:ilvl w:val=\"{level}\"/><w:numId w:val=\"{num}\"/></w:numPr>") + "</w:pPr>",
+    } + body + "</w:p>";
+string R(string text, string props = "") => $"<w:r>{(props.Length > 0 ? $"<w:rPr>{props}</w:rPr>" : "")}<w:t xml:space=\"preserve\">{text}</w:t></w:r>";
+string Cell(string text, bool bold = false) => $"<w:tc><w:tcPr><w:tcW w:w=\"0\" w:type=\"auto\"/></w:tcPr>{Para(R(text, bold ? "<w:b/>" : ""))}</w:tc>";
+string Level(int l, string format, string text) =>
+    $"<w:lvl w:ilvl=\"{l}\"><w:start w:val=\"1\"/><w:numFmt w:val=\"{format}\"/><w:lvlText w:val=\"{text}\"/><w:pPr><w:ind w:left=\"{720 * (l + 1)}\" w:hanging=\"360\"/></w:pPr></w:lvl>";
+var parts = new Dictionary<string, string>
+{
+    ["[Content_Types].xml"] = """
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>
+        """,
+    ["_rels/.rels"] = """
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
+        """,
+    ["word/_rels/document.xml.rels"] = """
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/" TargetMode="External"/></Relationships>
+        """,
+    ["word/styles.xml"] = $"""
+        <w:styles xmlns:w="{W}"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/><w:basedOn w:val="Normal"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:style></w:styles>
+        """,
+    ["word/numbering.xml"] = $"""
+        <w:numbering xmlns:w="{W}"><w:abstractNum w:abstractNumId="0">{Level(0, "bullet", "•")}{Level(1, "bullet", "o")}</w:abstractNum><w:abstractNum w:abstractNumId="1">{Level(0, "decimal", "%1.")}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>
+        """,
+    ["word/document.xml"] = $"""
+        <w:document xmlns:w="{W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>
+        {Para(R("Morph sample"), "Heading1")}
+        {Para(R("Plain text with ") + R("bold", "<w:b/>") + R(", ") + R("italic", "<w:i/>") + R(", ") + R("code", "<w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\"/>") + R(" and a ") + "<w:hyperlink r:id=\"rId3\">" + R("link", "<w:rStyle w:val=\"Hyperlink\"/>") + "</w:hyperlink>" + R("."))}
+        {Para(R("First item"), num: 1)}{Para(R("Second item"), num: 1)}{Para(R("Nested item"), num: 1, level: 1)}
+        {Para("")}
+        {Para(R("One"), num: 2)}{Para(R("Two"), num: 2)}
+        <w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid><w:tr>{Cell("Name", bold: true)}{Cell("Value", bold: true)}</w:tr><w:tr>{Cell("Cell A2")}{Cell("Cell B2")}</w:tr></w:tbl>
+        {Para(R("var x = 1;"), "HTMLPreformatted")}
+        <w:sectPr/></w:body></w:document>
+        """,
+};
+File.Delete(Path.Combine(dir, "sample.docx"));
+using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "sample.docx"), System.IO.Compression.ZipArchiveMode.Create))
+{
+    foreach (var (name, xml) in parts)
+    {
+        using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+        writer.Write(xml);
+    }
+}
+
 Console.WriteLine($"Fixtures in {dir}");
 return 0;

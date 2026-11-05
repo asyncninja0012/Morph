@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 
 using Morph.Core.Jobs;
+using Morph.Engines.Documents;
 using Morph.Engines.Imaging;
 using Morph.Engines.Media;
 using Morph.Engines.Pdf;
@@ -33,7 +34,7 @@ void Write(WorkerMessage message)
     }
 }
 
-IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine()];
+IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine()];
 var namer = new OutputNamer(request.OutputDirectory);
 JobResult result;
 try
