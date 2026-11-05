@@ -1,5 +1,5 @@
 # Builds artifacts/Morph_x64.msix (PLAN §8): self-contained ReadyToRun publish of the App and Worker into one layout,
-# plus ffmpeg, assets, notices and the manifest, packed with makeappx and signed with the dev cert (build/dev-cert.ps1).
+# plus ffmpeg, pdfium, assets, notices and the manifest, packed with makeappx and signed with the dev cert (build/dev-cert.ps1).
 #   ./build/pack.ps1 -Configuration Release          # signed, installable locally
 #   ./build/pack.ps1 -Configuration Release -NoSign  # CI and Store upload (the Store signs)
 param(
@@ -21,8 +21,10 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$($args[0]) failed with exit code $LASTEXITCODE" }
 }
 
-if (-not (Test-Path (Join-Path $artifacts 'binaries/ffmpeg.exe'))) {
-    throw 'ffmpeg.exe missing: run ./build/fetch-binaries.ps1 first.'
+foreach ($binary in 'ffmpeg.exe', 'pdfium.dll') {
+    if (-not (Test-Path (Join-Path $artifacts "binaries/$binary"))) {
+        throw "$binary missing: run ./build/fetch-binaries.ps1 first."
+    }
 }
 
 if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }

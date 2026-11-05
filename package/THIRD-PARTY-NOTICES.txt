@@ -20,6 +20,15 @@ Licence: GNU Lesser General Public License v2.1 or later (https://www.gnu.org/li
 Shipped as separate, replaceable executables. Morph does not link to FFmpeg.
 Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 (written source offer to follow with the 1.0 release, PLAN 5.4)
 --------------------------------------------------------------------------------
+PDFium (pdfium.dll), chromium/8125 build
+https://pdfium.googlesource.com/pdfium/  Build: https://github.com/bblanchon/pdfium-binaries (MIT)
+Licence: BSD-3-Clause / Apache-2.0 (https://pdfium.googlesource.com/pdfium/+/main/LICENSE)
+Includes FreeType (FreeType Licence), libjpeg-turbo (IJG / BSD-3-Clause), libpng (libpng licence), zlib (zlib licence),
+OpenJPEG (BSD-2-Clause), Little CMS (MIT), ICU (Unicode licence), HarfBuzz (MIT), Abseil (Apache-2.0), Highway
+(Apache-2.0), simdutf (Apache-2.0 / MIT), fast_float (Apache-2.0 / MIT), dragonbox (Apache-2.0 / Boost), AGG 2.3
+(BSD-style), LLVM libc (Apache-2.0 with LLVM exception). Full texts:
+https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F8125 (licenses/ in pdfium-win-x64.tgz)
+--------------------------------------------------------------------------------
 Microsoft.Extensions.Logging.Abstractions 10.0.0
 https://github.com/dotnet/dotnet
 Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)

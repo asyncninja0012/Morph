@@ -17,7 +17,8 @@
     {"id": "convert.flac", "label": "FLAC", "glyph": "", "hint": "Convert to FLAC", "wheel": "Convert"},
     {"id": "convert.ogg", "label": "OGG", "glyph": "", "hint": "Convert to OGG", "wheel": "Convert"},
     {"id": "convert.opus", "label": "Opus", "glyph": "", "hint": "Convert to Opus", "wheel": "Convert"},
-    {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"}
+    {"id": "convert.bmp", "label": "BMP", "glyph": "\ue91b", "hint": "Convert to BMP", "wheel": "Convert"},
+    {"id": "convert.txt", "label": "TXT", "glyph": "", "hint": "Extract the text to TXT", "wheel": "Convert"}
   ],
   "requirements": {
     "hevc-ext": {"reason": "Needs HEVC Video Extensions."}
@@ -140,6 +141,9 @@
     {"in": "m4a", "out": "opus", "tool": "convert", "engine": "media"},
     {"in": "wav", "out": "opus", "tool": "convert", "engine": "media"},
     {"in": "flac", "out": "opus", "tool": "convert", "engine": "media"},
-    {"in": "ogg", "out": "opus", "tool": "convert", "engine": "media"}
+    {"in": "ogg", "out": "opus", "tool": "convert", "engine": "media"},
+    {"in": "pdf", "out": "jpg", "tool": "convert", "engine": "pdf"},
+    {"in": "pdf", "out": "png", "tool": "convert", "engine": "pdf"},
+    {"in": "pdf", "out": "txt", "tool": "convert", "engine": "pdf"}
   ]
 }

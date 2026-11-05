@@ -86,6 +86,12 @@ public sealed class GoldenTests : IDisposable
             new SyncProgress<JobProgress>(_ => { }), ct);
 
         Assert.True(result.Status == JobStatus.Succeeded, $"{result.UserMessage} {result.Details}");
+        if (from == "pdf")
+        {
+            await AssertPdfPagesAsync(result.Outputs, to, ct);
+            return;
+        }
+
         var output = Assert.Single(result.Outputs);
         Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
         if (FileFormat.FromExtension(from).Kind == FileKind.Image)
@@ -95,6 +101,28 @@ public sealed class GoldenTests : IDisposable
         else
         {
             await AssertSameMediaAsync(input, output, from, to, ct);
+        }
+    }
+
+    // sample.pdf: two 216×144 pt pages, each with a red box (10,80)-(70,130) pt and "Morph sample page N".
+    private async Task AssertPdfPagesAsync(IReadOnlyList<string> outputs, string to, CancellationToken ct)
+    {
+        if (to == "txt")
+        {
+            var text = await File.ReadAllTextAsync(Assert.Single(outputs), ct);
+            Assert.Contains("Morph sample page 1", text, StringComparison.Ordinal);
+            Assert.Contains("Morph sample page 2", text, StringComparison.Ordinal);
+            return;
+        }
+
+        Assert.Equal([Path.Combine(_dir, $"sample-1.{to}"), Path.Combine(_dir, $"sample-2.{to}")], outputs);
+        foreach (var page in outputs)
+        {
+            Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(page, ct)).Id);
+            using var image = new MagickImage(page);
+            Assert.Equal((450u, 300u), (image.Width, image.Height)); // 3×2 inches at 150 DPI
+            var box = image.GetPixels().GetPixel(80, 80)!.ToColor()!;
+            Assert.True(box.R > 200 && box.G < 60 && box.B < 60, $"expected red at (80,80), got {box}");
         }
     }
 

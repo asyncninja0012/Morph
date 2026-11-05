@@ -87,5 +87,31 @@ foreach (var (name, ffArgs) in media)
     }
 }
 
+// PDF: two 3×2 inch pages (216×144 pt), each with a red box top-left and the line "Morph sample page N" in Helvetica.
+// Written by hand (no PDF library until task 2.2); xref offsets are byte positions, so the text is ASCII.
+var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+var offsets = new List<int>();
+void PdfObject(string body)
+{
+    offsets.Add(pdf.Length);
+    pdf.Append($"{offsets.Count} 0 obj\n{body}\nendobj\n");
+}
+
+string PageContent(int n) => $"1 0 0 rg 10 80 60 50 re f BT /F1 14 Tf 10 30 Td (Morph sample page {n}) Tj ET";
+PdfObject("<< /Type /Catalog /Pages 2 0 R >>");
+PdfObject("<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>");
+for (var n = 1; n <= 2; n++)
+{
+    PdfObject($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 216 144] /Resources << /Font << /F1 7 0 R >> >> /Contents {n * 2 + 2} 0 R >>");
+    PdfObject($"<< /Length {PageContent(n).Length} >>\nstream\n{PageContent(n)}\nendstream");
+}
+
+PdfObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+var xref = pdf.Length;
+pdf.Append($"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
+offsets.ForEach(o => pdf.Append($"{o:D10} 00000 n \n"));
+pdf.Append($"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+File.WriteAllText(Path.Combine(dir, "sample.pdf"), pdf.ToString(), System.Text.Encoding.ASCII);
+
 Console.WriteLine($"Fixtures in {dir}");
 return 0;

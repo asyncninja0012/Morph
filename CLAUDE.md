@@ -11,7 +11,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Windows APIs: query the `microsoft_docs_mcp` MCP before guessing any Win32/WinRT/WPF/MSIX API.
 
 ## Commands (repo root, PowerShell)
-- Native binaries (once after clone, and when a pin changes): `./build/fetch-binaries.ps1` → `artifacts/binaries/` (LGPL ffmpeg/ffprobe; media tests skip without them)
+- Native binaries (once after clone, and when a pin changes): `./build/fetch-binaries.ps1` → `artifacts/binaries/` (LGPL ffmpeg/ffprobe, pdfium.dll; media tests skip without ffmpeg)
 - Build: `dotnet build Morph.slnx -c Debug` (warnings are errors)
 - Unit + golden tests (golden needs `tests/fixtures/`, see next line): `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
 - UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)

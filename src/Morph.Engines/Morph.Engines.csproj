@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks> <!-- PDFium interop: text buffers and bitmap pointers -->
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
     <PackageReference Include="Magick.NET-Q8-x64" />
@@ -10,6 +14,9 @@
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffmpeg.exe;$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffprobe.exe"
           Condition="Exists('$(MSBuildThisFileDirectory)..\..\artifacts\binaries\ffmpeg.exe')"
+          CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\artifacts\binaries\pdfium.dll"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\artifacts\binaries\pdfium.dll')"
           CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" Visible="false" />
   </ItemGroup>
 

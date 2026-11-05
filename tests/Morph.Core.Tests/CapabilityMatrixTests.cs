@@ -32,6 +32,8 @@ public sealed class CapabilityMatrixTests
         Assert.Equal(["convert.mp3"], Ids([FileFormat.Mkv, FileFormat.Wav]));
         Assert.Equal(["convert.mp3", "convert.m4a", "convert.wav", "convert.ogg", "convert.opus"], Ids([FileFormat.Flac]));
         Assert.Equal(["convert.gif"], Ids([FileFormat.Jpg, FileFormat.Mov])); // imaging and media rows, one job each
+        Assert.Equal(["convert.png", "convert.jpg", "convert.txt"], Ids([FileFormat.Pdf]));
+        Assert.Equal(["convert.png", "convert.jpg"], Ids([FileFormat.Pdf, FileFormat.Jpg])); // pdf and imaging rows, one job each
         Assert.Empty(Ids([FileFormat.Jpg, FileFormat.Wav]));
         Assert.Empty(Ids([FileFormat.Unknown]));
     }
@@ -48,7 +50,7 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void No_files_offers_every_tool_of_the_wheel() =>
         Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.webm", "convert.mkv", "convert.avi",
-            "convert.gif", "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp"], Ids([]));
+            "convert.gif", "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp", "convert.txt"], Ids([]));
 
     [Fact]
     public void Heic_output_is_disabled_without_hevc()

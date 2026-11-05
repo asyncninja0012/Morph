@@ -5,6 +5,7 @@ using System.Text.Json;
 using Morph.Core.Jobs;
 using Morph.Engines.Imaging;
 using Morph.Engines.Media;
+using Morph.Engines.Pdf;
 
 // Runs one job per process (PLAN §2): a JobRequest line on stdin, WorkerMessage lines on stdout.
 // stdin closing before the job ends means cancel. The App also kills this whole Job Object if we don't stop in time.
@@ -32,7 +33,7 @@ void Write(WorkerMessage message)
     }
 }
 
-IEngine[] engines = [new ImagingEngine(), new MediaEngine()];
+IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine()];
 var namer = new OutputNamer(request.OutputDirectory);
 JobResult result;
 try

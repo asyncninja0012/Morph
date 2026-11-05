@@ -1,6 +1,6 @@
 # Morph — engineering plan
 
-Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 2 — next task 2.1.** Phase 1 done (gate passed 5 Nov 2026: developer tested the conversions on the installed MSIX). Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
+Status: **approved** (4 Nov 2026), including D1–D11. **Current phase: 2 — next task 2.2.** Phase 1 done (gate passed 5 Nov 2026: developer tested the conversions on the installed MSIX). Phase 0 done (gate passed 4 Nov 2026: developer ran the demo by hand on the installed MSIX; size over budget, see R3). Wheel direction: **A (Fluent ring)**, chosen 4 Nov 2026. Open questions in §12 still need answers before the tasks that depend on them (C++ toolchain: decide at 3.9).
 Product name is Morph (PRD/Project map say "Pith"). PRD IDs are referenced as e.g. `IX-2`.
 
 ---
@@ -238,7 +238,7 @@ Previews use WPF `Image` (thumbnails from the Worker), `InkCanvas` (annotate), a
 | Microsoft.Windows.CsWin32 0.3.367 (build-time) | MIT | 0 | Overlay, App | 0 |
 | Magick.NET-Q8-x64 14.17.2 | Apache-2.0 (bundles libheif/libde265 LGPL inside Magick.Native DLL — see R5) | 30 MB | Engines | 0 |
 | FFmpeg LGPL custom build (ffmpeg.exe + ffprobe.exe). **Interim (0.5):** BtbN `n9.0.2-45-g1e65c6cd5d-win64-lgpl-9.0` autobuild, SHA-256-pinned in `build/fetch-binaries.ps1` | LGPL-2.1 | 40 MB target (BtbN static build is far larger, see 0.6 size check) | package | 0 |
-| PDFium (pdfium-binaries) | BSD-3 / Apache-2.0 | 6 MB | Engines | 2 |
+| PDFium (bblanchon/pdfium-binaries chromium/8125, SHA-256-pinned in `build/fetch-binaries.ps1`) | BSD-3 / Apache-2.0 | 7.6 MB | Engines | 2 |
 | UglyToad.PdfPig | Apache-2.0 | 2 MB | Engines | 2 |
 | PDFsharp 6 | MIT | 2 MB | Engines | 2 |
 | DocumentFormat.OpenXml | MIT | 6 MB | Engines | 2 |
@@ -277,7 +277,7 @@ Each task ≈ one session. A phase ends with: green build, tests, CHANGELOG, CLA
 **Gate (5 Nov 2026):** passed. Conversions tested by the developer from the wheel; all 118 conversion rows (incl. MKV/AVI out, WMV in) pass golden tests. Changed by developer's call: no grouped/progress toast (failure-only, 1.7), so cancel is tested in code only (`MediaEngineTests`, `JobQueueTests`) until a UI cancel lands with 2.10; HEIC output hidden, not shown disabled, without HEVC.
 
 ### Phase 2 — Documents, PDF, archives, instant tools → **Alpha** (wk 6–9) · CV-2 rest, CV-5, IT-1/2/3/5, JB-5/6
-2.1 PDFium interop + PDF→JPG/PNG/TXT. 2.2 Images→PDF, merge PDFs (PDFsharp). 2.3 Document hub: DOCX/MD/HTML/TXT read/write. 2.4 WebView2 HTML→PDF + Word COM path (DOCX→PDF). 2.5 PDF→DOCX beta. 2.6 CSV↔XLSX, SRT↔VTT, ZIP/TAR/GZIP. 2.7 Compress/Resize presets (+ fit-under-X-MB for video/PDF). 2.8 Rotate/flip/strip metadata/extract audio/mute/make GIF/OCR/merge. 2.9 Password protect/unlock popover. 2.10 Undo (Recycle Bin, 10 min) + tray job history (50), opened from the 1.9 tray icon; running jobs listed there with Cancel (the only UI cancel since toasts are failure-only). 2.11 Hotkey path (IX-5) with Explorer selection.
+2.1 PDFium interop + PDF→JPG/PNG/TXT. **As built (2.1):** PDF→TXT uses PDFium's text API (`FPDFText_GetText`), not PdfPig; PdfPig waits for layout work (2.5). Pages render at 150 DPI (edge ≤ 10,000 px), one image per page (`report-1.png`, `report-2.png`, …; a 1-page PDF gives `report.png`). Password-protected PDFs fail with a plain message until 2.9. 2.2 Images→PDF, merge PDFs (PDFsharp). 2.3 Document hub: DOCX/MD/HTML/TXT read/write. 2.4 WebView2 HTML→PDF + Word COM path (DOCX→PDF). 2.5 PDF→DOCX beta. 2.6 CSV↔XLSX, SRT↔VTT, ZIP/TAR/GZIP. 2.7 Compress/Resize presets (+ fit-under-X-MB for video/PDF). 2.8 Rotate/flip/strip metadata/extract audio/mute/make GIF/OCR/merge. 2.9 Password protect/unlock popover. 2.10 Undo (Recycle Bin, 10 min) + tray job history (50), opened from the 1.9 tray icon; running jobs listed there with Cancel (the only UI cancel since toasts are failure-only). 2.11 Hotkey path (IX-5) with Explorer selection.
 **Demo:** full CV-2 list; 8+ instant tools; Undo restores state; hotkey wheel on an Explorer selection; developer uses it daily for a week.
 
 ### Phase 3 — Editors, actions, shell menu (wk 10–13) · ED-1..6, FA-1..3, IX-6
