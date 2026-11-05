@@ -6,6 +6,7 @@
     <AssemblyName>Morph</AssemblyName>
     <RootNamespace>Morph.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +15,7 @@
     <!-- Build order only: the App never references Engines; the Worker's output is copied next to Morph.exe below. -->
     <ProjectReference Include="..\Morph.Worker\Morph.Worker.csproj" ReferenceOutputAssembly="false" Private="false" />
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+    <EmbeddedResource Include="..\..\package\Assets\Square44x44Logo.png" LogicalName="tray.png" />
   </ItemGroup>
 
   <Target Name="CopyWorker" AfterTargets="Build">

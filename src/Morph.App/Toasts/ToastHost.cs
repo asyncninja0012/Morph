@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 
+using Microsoft.Extensions.Logging;
+
 using Morph.Core.Jobs;
 
 namespace Morph.App.Toasts;
@@ -16,12 +18,14 @@ namespace Morph.App.Toasts;
 public sealed class ToastHost
 {
     private readonly Dispatcher _dispatcher;
+    private readonly ILogger _log;
     private readonly List<ToastWindow> _windows = [];
     private readonly List<(JobGroup Group, Action Refresh)> _groups = [];
 
-    public ToastHost(JobQueue queue, Dispatcher dispatcher)
+    public ToastHost(JobQueue queue, Dispatcher dispatcher, ILogger log)
     {
         _dispatcher = dispatcher;
+        _log = log;
         queue.Updated += u => _dispatcher.BeginInvoke(() => OnUpdate(u));
     }
 
@@ -98,7 +102,7 @@ public sealed class ToastHost
         }
     }
 
-    private static void CopyDetails(string? details)
+    private void CopyDetails(string? details)
     {
         try
         {
@@ -106,7 +110,7 @@ public sealed class ToastHost
         }
         catch (COMException ex)
         {
-            Console.Error.WriteLine($"Copy details failed: {ex.Message}"); // clipboard held by another app
+            _log.LogWarning(ex, "Copy details failed: the clipboard is held by another app");
         }
     }
 }

@@ -1,10 +1,15 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
+using Microsoft.Extensions.Logging;
+
 using Morph.App.Toasts;
+using Morph.App.Tray;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
+using Morph.Core.Logging;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
 
@@ -37,43 +42,94 @@ public sealed partial class App : Application
         WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
 
     private readonly DragGestureDetector _dragGestures = new();
+    private FileLoggerProvider? _logs;
+    private ILogger _log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+    private TrayIcon? _tray;
     private ToastHost? _toasts;
     private DragWheelController? _wheel;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _ = Task.Run(async () => _canEncodeHeic = await SystemCodecs.CanEncodeHeicAsync());
 
-        // Created before the overlay windows: WPF makes the first Window the MainWindow, and closing it exits the app.
-        MainWindow = new MainWindow();
-        MainWindow.Show();
-        _toasts = new ToastHost(Jobs, Dispatcher);
+        // Started from a terminal (dev): echo the log there too, with drag and wheel detail.
+        var console = PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
+        _logs = new FileLoggerProvider(LogsDirectory(), console ? LogLevel.Debug : LogLevel.Information, echo: console ? Console.Out : null);
+        _log = _logs.CreateLogger("Morph");
+        DispatcherUnhandledException += (_, args) => _log.LogCritical(args.Exception, "Unhandled UI exception");
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => _log.LogCritical(args.ExceptionObject as Exception, "Unhandled exception");
+        TaskScheduler.UnobservedTaskException += (_, args) => _log.LogError(args.Exception, "Unobserved task exception");
+        _log.LogInformation("Morph {Version} starting on {Os}; logs in {Logs}",
+            typeof(App).Assembly.GetName().Version, Environment.OSVersion.VersionString, _logs.Directory);
 
-        // shortcut: spike logging to the launching console (tasks 0.2–0.3); replace with ILogger when logging lands in Phase 1.
-        PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
-        _dragGestures.GestureDetected += g => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {g}");
+        _ = Task.Run(async () =>
+        {
+            _canEncodeHeic = await SystemCodecs.CanEncodeHeicAsync();
+            _log.LogInformation("HEIC output {Availability}", _canEncodeHeic ? "available" : "hidden: HEVC Video Extensions missing");
+        });
 
+        using (var png = typeof(App).Assembly.GetManifestResourceStream("tray.png")!)
+        using (var bytes = new MemoryStream())
+        {
+            png.CopyTo(bytes);
+            _tray = new TrayIcon(bytes.ToArray(), _log);
+        }
+
+        _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
+        _tray.QuitClicked += Shutdown;
+        _toasts = new ToastHost(Jobs, Dispatcher, _log);
+
+        _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
         {
             ModifierKey.Shift => ConvertItems(files),
             ModifierKey.Ctrl => ToolItems,
             _ => ActionItems,
         });
-        _wheel.Diagnostic += m => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {m}");
+        _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
         _wheel.ItemDropped += OnItemDropped;
-        Jobs.Updated += u => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {u.Request.ToolId} {u.Request.Id:N} {u.Status} "
-            + (u.Progress is { } p ? $"{p.Fraction:P0} {p.Stage}" : "")
-            + (u.Result is { } r ? $"in {r.Elapsed.TotalMilliseconds:F0} ms: " + (r.Status == JobStatus.Succeeded ? string.Join(", ", r.Outputs) : $"{r.UserMessage} {r.Details}") : ""));
+        Jobs.Updated += LogResult;
 
         try
         {
             await _dragGestures.StartAsync();
-            Console.WriteLine("Drag gesture detector running.");
+            _log.LogInformation("Drag gesture detector running");
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine($"Drag gesture detector failed to start: {ex.Message}");
+            _log.LogError(ex, "Drag gesture detector failed to start");
+        }
+    }
+
+    // Packaged, %LOCALAPPDATA% is redirected into the package, where Explorer wouldn't find it; LocalState is the real folder.
+    private static string LogsDirectory()
+    {
+        try
+        {
+            return Path.Combine(ApplicationData.Current.LocalFolder.Path, "logs");
+        }
+        catch (InvalidOperationException)
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Morph", "logs"); // not packaged (dev)
+        }
+    }
+
+    private void LogResult(JobUpdate u)
+    {
+        if (u.Result is not { } r)
+        {
+            return;
+        }
+
+        if (r.Status == JobStatus.Failed)
+        {
+            _log.LogWarning("{Tool} failed after {Ms:F0} ms on {Inputs}: {Message}{NewLine}{Details}", u.Request.ToolId,
+                r.Elapsed.TotalMilliseconds, string.Join(", ", u.Request.Inputs), r.UserMessage, Environment.NewLine, r.Details);
+        }
+        else
+        {
+            _log.LogInformation("{Tool} {Status} in {Ms:F0} ms: {Inputs} -> {Outputs}", u.Request.ToolId, r.Status,
+                r.Elapsed.TotalMilliseconds, string.Join(", ", u.Request.Inputs), string.Join(", ", r.Outputs));
         }
     }
 
@@ -91,10 +147,10 @@ public sealed partial class App : Application
     // shortcut: conversions only; Tools/Actions wedges still just log.
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
-        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} DROP {item.Id}: {string.Join(", ", files.Paths)}");
+        _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
         if (!item.Id.StartsWith("convert.", StringComparison.Ordinal) || files.Paths.Count == 0)
         {
-            Console.WriteLine($"{item.Id} isn't wired up yet.");
+            _log.LogInformation("{Tool} isn't wired up yet", item.Id);
             return;
         }
 
@@ -118,8 +174,11 @@ public sealed partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _log.LogInformation("Morph exiting");
+        _tray?.Dispose();
         _wheel?.Dispose();
         _dragGestures.Dispose();
+        _logs?.Dispose();
         base.OnExit(e);
     }
 }

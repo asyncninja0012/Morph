@@ -20,3 +20,7 @@ Licence: GNU Lesser General Public License v2.1 or later (https://www.gnu.org/li
 Shipped as separate, replaceable executables. Morph does not link to FFmpeg.
 Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 (written source offer to follow with the 1.0 release, PLAN 5.4)
 --------------------------------------------------------------------------------
+Microsoft.Extensions.Logging.Abstractions 10.0.0
+https://github.com/dotnet/dotnet
+Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)
+--------------------------------------------------------------------------------
