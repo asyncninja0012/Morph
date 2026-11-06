@@ -135,7 +135,8 @@ internal static class HtmlWriter
 {
     private const string Style = "body{font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;max-width:46em;margin:2em auto;padding:0 1em}"
         + "table{border-collapse:collapse}th,td{border:1px solid #bbb;padding:.3em .6em;text-align:left}"
-        + "pre{background:#f4f4f4;padding:.8em;overflow:auto}code{font-family:Consolas,monospace}";
+        + "pre{background:#f4f4f4;padding:.8em;overflow:auto;white-space:pre-wrap}code{font-family:Consolas,monospace}"
+        + "@media print{body{max-width:none;margin:0;padding:0}}";
 
     public static string Write(IReadOnlyList<Block> blocks, string title) =>
         $"<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"

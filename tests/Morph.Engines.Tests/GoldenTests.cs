@@ -210,12 +210,13 @@ public sealed class GoldenTests : IDisposable
     }
 
     // The sample documents hold the same content (gen-fixtures); TXT keeps only the words.
-    private static async Task AssertSameDocumentAsync(string input, string output, string from, string to, CancellationToken ct)
+    private async Task AssertSameDocumentAsync(string input, string output, string from, string to, CancellationToken ct)
     {
-        var actual = await DocumentEngine.ReadAsync(output, ct);
-        if (from == "txt" || to == "txt")
+        var actual = to == "pdf" ? [] : await DocumentEngine.ReadAsync(output, ct);
+        if (from == "txt" || to is "txt" or "pdf")
         {
-            var text = Runs.Plain(actual);
+            // A PDF keeps the words; read them back through the PDFium PDF -> TXT path that golden-tests itself.
+            var text = to == "pdf" ? await File.ReadAllTextAsync(Assert.Single((await RunAsync("convert.txt", "pdf", [output], ct)).Outputs), ct) : Runs.Plain(actual);
             foreach (var phrase in new[] { "Morph sample", "Plain text with bold", "First item", "Nested item", "Two", "Cell B2", "var x = 1;" })
             {
                 Assert.Contains(phrase, text, StringComparison.Ordinal);

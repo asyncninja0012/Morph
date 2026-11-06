@@ -41,6 +41,10 @@ System.IO.Packaging 10.0.2 (used by DocumentFormat.OpenXml)
 https://github.com/dotnet/dotnet
 Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)
 --------------------------------------------------------------------------------
+Microsoft.Web.WebView2 1.0.4258.31 (SDK; the WebView2 Runtime is part of Windows)
+https://www.nuget.org/packages/Microsoft.Web.WebView2
+Licence: BSD-3-Clause (https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31/License)
+--------------------------------------------------------------------------------
 Markdig 1.6.0
 https://github.com/xoofx/markdig
 Licence: BSD-2-Clause (https://github.com/xoofx/markdig/blob/main/license.txt)

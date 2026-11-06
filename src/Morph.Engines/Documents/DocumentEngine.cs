@@ -6,8 +6,9 @@ using Morph.Core.Jobs;
 namespace Morph.Engines.Documents;
 
 /// <summary>
-/// DOCX, Markdown, HTML and TXT among each other (CV-2, task 2.3). Every input is read into the <see cref="Block"/> tree (Doc.cs),
-/// then written out. Tool ids: convert.docx/md/html/txt.
+/// DOCX, Markdown, HTML and TXT among each other and to PDF (CV-2, tasks 2.3, 2.4). Every input is read into the <see cref="Block"/>
+/// tree (Doc.cs), then written out; PDF is the HTML page printed by WebView2, or Word's own export for DOCX when Word is installed.
+/// Tool ids: convert.docx/md/html/txt/pdf.
 /// </summary>
 public sealed class DocumentEngine : IEngine
 {
@@ -19,7 +20,7 @@ public sealed class DocumentEngine : IEngine
     {
         var target = job.ToolId switch
         {
-            "convert.docx" or "convert.md" or "convert.html" or "convert.txt" => job.ToolId["convert.".Length..],
+            "convert.docx" or "convert.md" or "convert.html" or "convert.txt" or "convert.pdf" => job.ToolId["convert.".Length..],
             _ => throw new EngineException("This conversion isn't available yet.", $"document: unsupported tool {job.ToolId}"),
         };
 
@@ -37,6 +38,17 @@ public sealed class DocumentEngine : IEngine
             if (target == "docx")
             {
                 DocxWriter.Write(blocks, output);
+            }
+            else if (target == "pdf")
+            {
+                if (FileFormat.FromExtension(Path.GetExtension(input)) == FileFormat.Docx && WordPdfExporter.IsAvailable)
+                {
+                    await WordPdfExporter.ExportAsync(input, output, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await HtmlPdfPrinter.PrintAsync(HtmlWriter.Write(blocks, Path.GetFileNameWithoutExtension(input)), output, ct).ConfigureAwait(false);
+                }
             }
             else
             {

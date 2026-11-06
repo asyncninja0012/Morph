@@ -178,6 +178,10 @@
     {"in": "html", "out": "txt", "tool": "convert", "engine": "document"},
     {"in": "txt", "out": "docx", "tool": "convert", "engine": "document"},
     {"in": "txt", "out": "md", "tool": "convert", "engine": "document"},
-    {"in": "txt", "out": "html", "tool": "convert", "engine": "document"}
+    {"in": "txt", "out": "html", "tool": "convert", "engine": "document"},
+    {"in": "docx", "out": "pdf", "tool": "convert", "engine": "document"},
+    {"in": "md", "out": "pdf", "tool": "convert", "engine": "document"},
+    {"in": "html", "out": "pdf", "tool": "convert", "engine": "document"},
+    {"in": "txt", "out": "pdf", "tool": "convert", "engine": "document"}
   ]
 }

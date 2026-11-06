@@ -18,7 +18,7 @@ internal sealed class WorkerJobObject : IDisposable
     private const uint BelowNormalPriorityClass = 0x4000;
     private readonly SafeFileHandle _handle;
 
-    public unsafe WorkerJobObject(ulong processMemoryLimit)
+    public unsafe WorkerJobObject(ulong processMemoryLimit, uint activeProcessLimit = 4)
     {
         _handle = PInvoke.CreateJobObject(null, null);
         if (_handle.IsInvalid)
@@ -33,7 +33,7 @@ internal sealed class WorkerJobObject : IDisposable
                 LimitFlags = JOB_OBJECT_LIMIT.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT.JOB_OBJECT_LIMIT_PROCESS_MEMORY
                     | JOB_OBJECT_LIMIT.JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT.JOB_OBJECT_LIMIT_PRIORITY_CLASS
                     | JOB_OBJECT_LIMIT.JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION, // no WER dialog for a crashing decoder
-                ActiveProcessLimit = 4,
+                ActiveProcessLimit = activeProcessLimit,
                 PriorityClass = BelowNormalPriorityClass,
             },
             ProcessMemoryLimit = (nuint)processMemoryLimit,
