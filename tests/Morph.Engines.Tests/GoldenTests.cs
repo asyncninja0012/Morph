@@ -83,7 +83,7 @@ public sealed class GoldenTests : IDisposable
         Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(input, ct)).Id);
 
         var result = await RunAsync($"convert.{to}", engine, [input], ct);
-        if (from == "pdf")
+        if (from == "pdf" && engine == "pdf")
         {
             await AssertPdfPagesAsync(result.Outputs, to, ct);
             return;
@@ -213,6 +213,13 @@ public sealed class GoldenTests : IDisposable
     private async Task AssertSameDocumentAsync(string input, string output, string from, string to, CancellationToken ct)
     {
         var actual = to == "pdf" ? [] : await DocumentEngine.ReadAsync(output, ct);
+        if (from == "pdf")
+        {
+            // sample.pdf is two lines of text; the sample document's round trip through PDF is in DocumentEngineTests.
+            Assert.Equal(["Morph sample page 1", "Morph sample page 2"], actual.Select(b => Runs.Plain(((Paragraph)b).Runs)));
+            return;
+        }
+
         if (from == "txt" || to is "txt" or "pdf")
         {
             // A PDF keeps the words; read them back through the PDFium PDF -> TXT path that golden-tests itself.

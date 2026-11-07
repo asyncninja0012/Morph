@@ -182,6 +182,7 @@
     {"in": "docx", "out": "pdf", "tool": "convert", "engine": "document"},
     {"in": "md", "out": "pdf", "tool": "convert", "engine": "document"},
     {"in": "html", "out": "pdf", "tool": "convert", "engine": "document"},
-    {"in": "txt", "out": "pdf", "tool": "convert", "engine": "document"}
+    {"in": "txt", "out": "pdf", "tool": "convert", "engine": "document"},
+    {"in": "pdf", "out": "docx", "tool": "convert", "engine": "document", "beta": true}
   ]
 }

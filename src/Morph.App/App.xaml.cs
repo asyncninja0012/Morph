@@ -137,12 +137,11 @@ public sealed partial class App : Application
     // The wheel goes by extension: it opens on DragEnter (no I/O allowed) and virtual files only have names.
     // The Worker sniffs the real format and refuses a file that isn't what its extension says.
     // Options this PC can't run (e.g. HEIC output without HEVC) are left out rather than shown disabled.
-    // shortcut: beta isn't drawn yet (no row is beta until PDF → DOCX in Phase 2).
     private static IReadOnlyList<WheelItem> MatrixItems(IReadOnlyList<string> files, WheelGroup wheel) =>
     [
         .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], wheel)
             .Where(o => o.DisabledReason is null)
-            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph)),
+            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph, o.Beta)),
     ];
 
     // shortcut: capabilities.json tools only; the placeholder Tools and the Actions wedges still just log.

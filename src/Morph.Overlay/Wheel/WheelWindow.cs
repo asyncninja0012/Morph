@@ -89,6 +89,10 @@ internal sealed class WheelWindow : Window
             var anchor = WheelGeometry.PointAt(mid, WheelGeometry.ContentRadius);
             var icon = Text(items[i].Glyph, 16, FontWeights.Normal, anchor + new Vector(0, -9), IconFont);
             var label = Text(items[i].Label, 11, FontWeights.SemiBold, anchor + new Vector(0, 12));
+            if (items[i].Beta)
+            {
+                label.Inlines.Add(new System.Windows.Documents.Run(" beta") { FontSize = 8, FontWeight = FontWeights.Normal });
+            }
             _canvas.Children.Add(wedge);
             _canvas.Children.Add(icon);
             _canvas.Children.Add(label);

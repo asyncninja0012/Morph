@@ -49,6 +49,10 @@ Markdig 1.6.0
 https://github.com/xoofx/markdig
 Licence: BSD-2-Clause (https://github.com/xoofx/markdig/blob/main/license.txt)
 --------------------------------------------------------------------------------
+PdfPig 0.1.16
+https://github.com/UglyToad/PdfPig
+Licence: Apache-2.0 (https://github.com/UglyToad/PdfPig/blob/master/LICENSE)
+--------------------------------------------------------------------------------
 PDFsharp 6.2.4
 https://github.com/empira/PDFsharp
 Licence: MIT (https://github.com/empira/PDFsharp/blob/master/LICENSE)

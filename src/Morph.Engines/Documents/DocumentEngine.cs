@@ -6,13 +6,14 @@ using Morph.Core.Jobs;
 namespace Morph.Engines.Documents;
 
 /// <summary>
-/// DOCX, Markdown, HTML and TXT among each other and to PDF (CV-2, tasks 2.3, 2.4). Every input is read into the <see cref="Block"/>
+/// DOCX, Markdown, HTML and TXT among each other and to PDF, and PDF to DOCX as a beta (CV-2, CV-5, tasks 2.3-2.5). Every input is read into the <see cref="Block"/>
 /// tree (Doc.cs), then written out; PDF is the HTML page printed by WebView2, or Word's own export for DOCX when Word is installed.
 /// Tool ids: convert.docx/md/html/txt/pdf.
 /// </summary>
 public sealed class DocumentEngine : IEngine
 {
     private const long MaxBytes = 50L * 1024 * 1024; // a text document this large is almost certainly not one
+    private const long MaxPdfBytes = 500L * 1024 * 1024; // PDFs are big from their images; PdfPig holds the whole file in memory
 
     public string Id => "document";
 
@@ -69,9 +70,15 @@ public sealed class DocumentEngine : IEngine
     {
         var name = Path.GetFileName(input);
         var format = (await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id;
-        if (new FileInfo(input).Length > MaxBytes)
+        var max = format == "pdf" ? MaxPdfBytes : MaxBytes;
+        if (new FileInfo(input).Length > max)
         {
-            throw new EngineException($"{name} is over {MaxBytes / 1024 / 1024} MB; Morph converts documents up to that size.");
+            throw new EngineException($"{name} is over {max / 1024 / 1024} MB; Morph converts documents up to that size.");
+        }
+
+        if (format == "pdf")
+        {
+            return PdfReader.Read(input);
         }
 
         if (format == "docx")

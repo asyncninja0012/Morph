@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" />
     <!-- A Dispatcher and a hidden HwndSource host WebView2 for HTML -> PDF; WPF ships with the App anyway. Not UseWPF: it drops the System.IO using. -->
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
+    <PackageReference Include="PdfPig" />
     <PackageReference Include="PDFsharp" />
     <InternalsVisibleTo Include="Morph.Engines.Tests" />
   </ItemGroup>
