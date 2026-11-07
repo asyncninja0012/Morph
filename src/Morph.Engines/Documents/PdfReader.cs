@@ -19,7 +19,7 @@ namespace Morph.Engines.Documents;
 /// bigger-than-body blocks become headings, lines that start with a bullet or number become list items, all-monospace blocks
 /// become code, and bold, italic and link areas carry over to the words.
 /// </summary>
-// shortcut: tables come out as paragraphs, images are dropped, and a scanned PDF has no text (needs OCR, task 2.8).
+// shortcut: tables come out as paragraphs (ruled tables: task 2.13), images are dropped (task 2.12), and a scanned PDF has no text (needs OCR, task 2.8).
 internal static partial class PdfReader
 {
     private const int MaxPages = 2000; // same limit as the PDF engine

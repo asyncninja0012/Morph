@@ -1,7 +1,7 @@
 namespace Morph.Engines.Documents;
 
 // The documents hub (PLAN §6): every reader builds this tree and every writer takes it, so N formats need N readers + N writers.
-// shortcut: images, block quotes, page breaks and rules are dropped; add blocks here when a format needs them.
+// shortcut: images (task 2.12), block quotes, page breaks and rules are dropped; add blocks here when a format needs them.
 
 /// <summary>A span of text with one formatting. "\n" inside <see cref="Text"/> is a line break.</summary>
 internal sealed record Run(string Text, bool Bold = false, bool Italic = false, bool Code = false, string? Link = null);
