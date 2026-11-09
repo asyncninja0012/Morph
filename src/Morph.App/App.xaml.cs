@@ -29,7 +29,7 @@ public sealed partial class App : Application
     // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land.
     private static readonly WheelItem[] PlaceholderTools =
     [
-        new("compress", "Compress", ""), new("resize", "Resize", ""), new("rotate", "Rotate", ""),
+        new("rotate", "Rotate", ""),
         new("crop", "Crop", ""), new("strip-metadata", "Strip info", ""), new("ocr", "Text (OCR)", ""),
     ];
 
@@ -141,14 +141,15 @@ public sealed partial class App : Application
     [
         .. Matrix.OptionsFor([.. files.Select(f => FileFormat.FromExtension(Path.GetExtension(f)))], wheel)
             .Where(o => o.DisabledReason is null)
-            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph, o.Beta)),
+            .Select(o => new WheelItem(o.Tool.Id, o.Tool.Label, o.Tool.Glyph, o.Beta,
+                o.Choices.Count > 0 ? [.. o.Choices.Select(c => new WheelItem($"{o.Tool.Id}/{c.Id}", c.Label, ""))] : null)),
     ];
 
     // shortcut: capabilities.json tools only; the placeholder Tools and the Actions wedges still just log.
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
-        if (Matrix.Tool(item.Id) is null || files.Paths.Count == 0)
+        if (Matrix.Tool(ToolId(item)) is null || files.Paths.Count == 0)
         {
             _log.LogInformation("{Tool} isn't wired up yet", item.Id);
             return;
@@ -177,12 +178,14 @@ public sealed partial class App : Application
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
         // Merge makes one file, so it's one job, saved next to the first file.
         var merge = item.Id == "merge";
+        var tool = Matrix.Tool(ToolId(item))!;
+        var choice = item.Id.Contains('/', StringComparison.Ordinal) ? item.Id[(item.Id.IndexOf('/', StringComparison.Ordinal) + 1)..] : null;
         var jobs = files.Paths
-            .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), item.Id)))
+            .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), tool.Id)))
             .Where(f => f.Row is not null)
             .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!))
-            .Select(g => new JobRequest(Guid.NewGuid(), item.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
-                Matrix.Tool(item.Id)?.Defaults?.DeepClone().AsObject()))
+            .Select(g => new JobRequest(Guid.NewGuid(), tool.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
+                tool.ParametersFor(choice)))
             .Select(r => (r, Jobs.Enqueue(r)))
             .ToList();
 
@@ -192,6 +195,9 @@ public sealed partial class App : Application
             _toasts?.Track(jobs, files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files");
         }
     }
+
+    // A preset on the outer ring is "tool/choice".
+    private static string ToolId(WheelItem item) => item.Id.Split('/')[0];
 
     protected override void OnExit(ExitEventArgs e)
     {

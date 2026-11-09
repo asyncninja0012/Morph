@@ -30,6 +30,21 @@
     {"id": "convert.zip", "label": "ZIP", "glyph": "", "hint": "Repack as a ZIP", "wheel": "Convert"},
     {"id": "convert.tar", "label": "TAR", "glyph": "", "hint": "Repack as a TAR", "wheel": "Convert"},
     {"id": "convert.gz", "label": "TAR.GZ", "glyph": "", "hint": "Repack as a gzipped TAR", "wheel": "Convert"},
+    {"id": "compress", "label": "Compress", "glyph": "", "hint": "Make it smaller", "wheel": "Tools", "defaults": {"preset": "balanced"},
+      "choices": [
+        {"id": "small", "label": "Small", "defaults": {"preset": "small"}},
+        {"id": "balanced", "label": "Balanced", "defaults": {"preset": "balanced"}},
+        {"id": "high", "label": "High quality", "defaults": {"preset": "high"}},
+        {"id": "10mb", "label": "Under 10 MB", "defaults": {"targetMb": 10}, "kinds": ["Video", "Pdf"]},
+        {"id": "25mb", "label": "Under 25 MB", "defaults": {"targetMb": 25}, "kinds": ["Video", "Pdf"]}
+      ]},
+    {"id": "resize", "label": "Resize", "glyph": "", "hint": "Make it smaller in pixels", "wheel": "Tools", "defaults": {"scale": 0.5},
+      "choices": [
+        {"id": "half", "label": "50%", "defaults": {"scale": 0.5}},
+        {"id": "1080p", "label": "1080p", "defaults": {"long": 1920, "short": 1080}},
+        {"id": "720p", "label": "720p", "defaults": {"long": 1280, "short": 720}},
+        {"id": "2048", "label": "2048 px", "defaults": {"long": 2048}}
+      ]},
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Merge into one PDF, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
@@ -200,6 +215,35 @@
     {"in": "tar", "out": "zip", "tool": "convert", "engine": "archive"},
     {"in": "tar", "out": "gz", "tool": "convert", "engine": "archive"},
     {"in": "gz", "out": "zip", "tool": "convert", "engine": "archive"},
-    {"in": "gz", "out": "tar", "tool": "convert", "engine": "archive"}
+    {"in": "gz", "out": "tar", "tool": "convert", "engine": "archive"},
+    {"in": "jpg", "tool": "compress", "engine": "imaging"},
+    {"in": "png", "tool": "compress", "engine": "imaging"},
+    {"in": "webp", "tool": "compress", "engine": "imaging"},
+    {"in": "avif", "tool": "compress", "engine": "imaging"},
+    {"in": "mp4", "tool": "compress", "engine": "media"},
+    {"in": "mov", "tool": "compress", "engine": "media"},
+    {"in": "mkv", "tool": "compress", "engine": "media"},
+    {"in": "webm", "tool": "compress", "engine": "media"},
+    {"in": "avi", "tool": "compress", "engine": "media"},
+    {"in": "wmv", "tool": "compress", "engine": "media"},
+    {"in": "mp3", "tool": "compress", "engine": "media"},
+    {"in": "m4a", "tool": "compress", "engine": "media"},
+    {"in": "ogg", "tool": "compress", "engine": "media"},
+    {"in": "opus", "tool": "compress", "engine": "media"},
+    {"in": "wav", "tool": "compress", "engine": "media"},
+    {"in": "flac", "tool": "compress", "engine": "media"},
+    {"in": "pdf", "tool": "compress", "engine": "pdf"},
+    {"in": "jpg", "tool": "resize", "engine": "imaging"},
+    {"in": "png", "tool": "resize", "engine": "imaging"},
+    {"in": "webp", "tool": "resize", "engine": "imaging"},
+    {"in": "avif", "tool": "resize", "engine": "imaging"},
+    {"in": "tiff", "tool": "resize", "engine": "imaging"},
+    {"in": "bmp", "tool": "resize", "engine": "imaging"},
+    {"in": "mp4", "tool": "resize", "engine": "media"},
+    {"in": "mov", "tool": "resize", "engine": "media"},
+    {"in": "mkv", "tool": "resize", "engine": "media"},
+    {"in": "webm", "tool": "resize", "engine": "media"},
+    {"in": "avi", "tool": "resize", "engine": "media"},
+    {"in": "wmv", "tool": "resize", "engine": "media"}
   ]
 }

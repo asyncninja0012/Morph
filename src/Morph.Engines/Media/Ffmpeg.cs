@@ -8,7 +8,9 @@ using Morph.Core.Jobs;
 namespace Morph.Engines.Media;
 
 /// <param name="Duration">Seconds, or null when unknown.</param>
-public sealed record MediaInfo(double? Duration, string? VideoCodec, string? PixelFormat, string? AudioCodec);
+/// <param name="AudioKbps">The audio stream's bit rate, or the whole file's for an audio-only file; null when unknown.</param>
+public sealed record MediaInfo(double? Duration, string? VideoCodec, string? PixelFormat, string? AudioCodec,
+    int Width = 0, int Height = 0, double? AudioKbps = null);
 
 /// <summary>Runs the bundled LGPL ffmpeg.exe/ffprobe.exe (PLAN §5). Never a system copy: that could be a GPL build.</summary>
 public sealed class Ffmpeg(string directory)
@@ -25,7 +27,7 @@ public sealed class Ffmpeg(string directory)
     public async Task<MediaInfo> ProbeAsync(string input, string demuxer, CancellationToken ct)
     {
         var (exit, stdout, _) = await RunAsync(FfprobePath,
-            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration:stream=codec_type,codec_name,pix_fmt",
+            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration,bit_rate:stream=codec_type,codec_name,pix_fmt,width,height,bit_rate",
                 "-of", "json", input],
             onStdoutLine: null, ct).ConfigureAwait(false);
         if (exit != 0 || JsonNode.Parse(stdout) is not { } json)
@@ -37,8 +39,13 @@ public sealed class Ffmpeg(string directory)
         var video = streams.FirstOrDefault(s => (string?)s?["codec_type"] == "video");
         var audio = streams.FirstOrDefault(s => (string?)s?["codec_type"] == "audio");
         var duration = double.TryParse((string?)json["format"]?["duration"], NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0 ? d : (double?)null;
-        return new MediaInfo(duration, (string?)video?["codec_name"], (string?)video?["pix_fmt"], (string?)audio?["codec_name"]);
+        var audioKbps = Number(audio?["bit_rate"]) ?? (video is null ? Number(json["format"]?["bit_rate"]) : null);
+        return new MediaInfo(duration, (string?)video?["codec_name"], (string?)video?["pix_fmt"], (string?)audio?["codec_name"],
+            (int?)video?["width"] ?? 0, (int?)video?["height"] ?? 0, audioKbps / 1000);
     }
+
+    private static double? Number(JsonNode? node) =>
+        double.TryParse((string?)node, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : null;
 
     /// <summary>
     /// Runs ffmpeg with <paramref name="args"/> (inputs, filters, output) after the standard prefix, reporting

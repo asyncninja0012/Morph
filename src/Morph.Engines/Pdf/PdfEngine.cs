@@ -31,6 +31,12 @@ public sealed class PdfEngine : IEngine
             return;
         }
 
+        if (job.ToolId == "compress")
+        {
+            Compress(job, namer, progress, ct);
+            return;
+        }
+
         var target = job.ToolId switch
         {
             "convert.jpg" => MagickFormat.Jpeg,
@@ -53,6 +59,33 @@ public sealed class PdfEngine : IEngine
             {
                 Convert(input, target, quality, namer, f => progress.Report(new JobProgress((done + f) / job.Inputs.Count, null)), ct);
             }
+        }
+    }
+
+    // A file already small enough is skipped; the job fails only when every file was.
+    private static void Compress(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        string? skipped = null;
+        var made = 0;
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            var pending = namer.Reserve(job.Inputs[i], ".pdf", "-compressed");
+            if (PdfCompressor.Compress(job.Inputs[i], pending.Path, Presets.Compress(job.Parameters), Presets.TargetBytes(job.Parameters), ct) is { } reason)
+            {
+                namer.Discard(pending);
+                skipped = reason;
+            }
+            else
+            {
+                made++;
+            }
+
+            progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
         }
     }
 

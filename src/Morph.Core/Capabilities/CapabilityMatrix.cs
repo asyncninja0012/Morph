@@ -12,8 +12,32 @@ public enum WheelGroup { Convert, Tools, Actions }
 /// <param name="Id">"convert.png", "compress", "action.copy-path".</param>
 /// <param name="Defaults">Engine parameters used unless settings say otherwise (CV-4), e.g. { "quality": 90 }. Per tool, so per output format.</param>
 /// <param name="MinFiles">Fewest files the tool makes sense for; 2 for merge.</param>
+/// <param name="Choices">Presets on the wheel's outer ring (Compress → Small/Balanced/High); the wedge itself runs <paramref name="Defaults"/>.</param>
 public sealed record ToolDescriptor(string Id, string Label, string Glyph, string Hint, WheelGroup Wheel, JsonObject? Defaults = null,
-    int MinFiles = 1);
+    int MinFiles = 1, IReadOnlyList<ToolChoice>? Choices = null)
+{
+    /// <summary>Job parameters: the tool's defaults with the choice's on top; null choice = the wedge itself.</summary>
+    public JsonObject? ParametersFor(string? choiceId)
+    {
+        var choice = Choices?.FirstOrDefault(c => c.Id == choiceId);
+        if (choice is null)
+        {
+            return Defaults?.DeepClone().AsObject();
+        }
+
+        var merged = Defaults?.DeepClone().AsObject() ?? [];
+        foreach (var (key, value) in choice.Defaults)
+        {
+            merged[key] = value?.DeepClone();
+        }
+
+        return merged;
+    }
+}
+
+/// <summary>One preset of a tool, e.g. Compress → "Under 10 MB".</summary>
+/// <param name="Kinds">Only offered when every file is one of these kinds; null = all the tool takes.</param>
+public sealed record ToolChoice(string Id, string Label, JsonObject Defaults, IReadOnlyList<FileKind>? Kinds = null);
 
 /// <summary>One row of <c>capabilities.json</c> (CV-3): this input format can run this tool with this engine.</summary>
 /// <param name="Out">Output format id for conversions; null for tools that keep the format.</param>
@@ -29,7 +53,8 @@ public sealed record CapabilityRow(string In, string Tool, string Engine, string
 public sealed record Requirement(string Reason, Uri? Fix = null);
 
 /// <param name="DisabledReason">Non-null when the tool fits the files but something it needs is missing.</param>
-public sealed record WheelOption(ToolDescriptor Tool, string? DisabledReason, Uri? FixLink, bool Beta);
+/// <param name="Choices">The tool's presets that fit every file.</param>
+public sealed record WheelOption(ToolDescriptor Tool, string? DisabledReason, Uri? FixLink, bool Beta, IReadOnlyList<ToolChoice> Choices);
 
 /// <summary>
 /// The capability matrix (PLAN §2): which tools the wheel offers for a set of files. An option appears only if it
@@ -103,7 +128,8 @@ public sealed class CapabilityMatrix
 
             if (fits)
             {
-                options.Add(new WheelOption(tool, missing?.Reason, missing?.Fix, beta));
+                var choices = (tool.Choices ?? []).Where(c => c.Kinds is null || files.All(f => c.Kinds.Contains(f.Kind))).ToList();
+                options.Add(new WheelOption(tool, missing?.Reason, missing?.Fix, beta, choices));
             }
         }
 

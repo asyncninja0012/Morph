@@ -17,13 +17,14 @@ namespace Morph.Overlay.Wheel;
 /// </summary>
 internal sealed class WheelWindow : Window
 {
-    public const double SizeDip = 264; // 240 ring + room for the shadow
+    public const double SizeDip = 2 * WheelGeometry.RingOuterRadius + 16; // preset ring + room for the shadow; see-through outside what's drawn
     private static readonly Point Centre = new(SizeDip / 2, SizeDip / 2);
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
     private readonly Canvas _canvas = new() { Width = SizeDip, Height = SizeDip };
     private readonly ScaleTransform _scale = new(1, 1, SizeDip / 2, SizeDip / 2);
     private readonly List<(Path Wedge, TextBlock Icon, TextBlock Label)> _wedges = [];
+    private readonly List<(Path Wedge, TextBlock Label)> _choices = [];
 
     // Frosted glass: layered windows can't get DWM blur, so the wheel blurs a snapshot of what's behind it.
     private readonly Image _behind = new()
@@ -46,6 +47,8 @@ internal sealed class WheelWindow : Window
     private IReadOnlyList<WheelItem> _items = [];
     private Palette _palette = Palette.For(dark: false, glass: false);
     private int? _highlighted;
+    private int? _expanded; // wedge whose presets are on the outer ring
+    private int? _highlightedChoice;
 
     public WheelWindow()
     {
@@ -68,6 +71,9 @@ internal sealed class WheelWindow : Window
         _glass = MorphGlass.TransparencyEnabled();
         _palette = Palette.For(dark, _glass);
         _highlighted = null;
+        _expanded = null;
+        _highlightedChoice = null;
+        _choices.Clear();
         _wedges.Clear();
         _canvas.Children.Clear();
 
@@ -109,33 +115,44 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Add(captionText);
     }
 
-    /// <summary>Item under a drag position (DragOver coordinates; no mouse events arrive during OLE drags).</summary>
+    /// <summary>Item under a drag position (DragOver coordinates; no mouse events arrive during OLE drags): a wedge, or a preset of the open ring.</summary>
     public WheelItem? ItemAt(DragEventArgs e)
     {
-        var pos = e.GetPosition(_canvas);
-        var index = WheelGeometry.HitTest(pos.X - Centre.X, pos.Y - Centre.Y, _items.Count);
-        return index is { } i ? _items[i] : null;
+        var (wedge, choice, _) = Hit(e);
+        return choice is { } c ? _items[_expanded!.Value].Choices![c] : wedge is { } w ? _items[w] : null;
     }
 
-    public void Highlight(WheelItem? item)
+    /// <summary>Highlights what's under the pointer and opens or closes the preset ring; returns <see cref="ItemAt"/>.</summary>
+    public WheelItem? Hover(DragEventArgs e)
     {
-        int? index = item is null ? null : IndexOf(item);
-        if (index == _highlighted)
+        var (wedge, choice, inRing) = Hit(e);
+        if (inRing)
         {
-            return;
+            // On the ring: the wedge stays open, only the preset highlight moves.
+            SetChoice(choice);
+            SetWedge(_expanded, highlighted: choice is null);
+            return ItemAt(e);
         }
 
-        if (_highlighted is { } old)
+        SetChoice(null);
+        if (wedge != _expanded)
         {
-            Paint(old, highlighted: false);
+            Collapse();
+            if (wedge is { } w && _items[w].Choices is { Count: > 0 })
+            {
+                Expand(w);
+            }
         }
 
-        if (index is { } i)
-        {
-            Paint(i, highlighted: true);
-        }
+        SetWedge(wedge, highlighted: true);
+        return wedge is { } i ? _items[i] : null;
+    }
 
-        _highlighted = index;
+    public void ClearHover()
+    {
+        SetChoice(null);
+        Collapse();
+        SetWedge(null, highlighted: false);
     }
 
     public void ShowAt(System.Drawing.Point cursor)
@@ -152,27 +169,106 @@ internal sealed class WheelWindow : Window
         _scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.92, 1, duration) { EasingFunction = ease });
     }
 
-    private int? IndexOf(WheelItem item)
+    /// <param name="InRing">Past the disc's edge with a preset ring open: the ring owns the point, even between presets.</param>
+    private (int? Wedge, int? Choice, bool InRing) Hit(DragEventArgs e)
     {
-        for (var i = 0; i < _items.Count; i++)
+        var pos = e.GetPosition(_canvas);
+        var (dx, dy) = (pos.X - Centre.X, pos.Y - Centre.Y);
+        if (_expanded is { } open && Math.Sqrt(dx * dx + dy * dy) > WheelGeometry.DiscRadius)
         {
-            if (ReferenceEquals(_items[i], item))
-            {
-                return i;
-            }
+            return (null, WheelGeometry.HitTestChoice(dx, dy, open, _items.Count, _items[open].Choices!.Count), true);
         }
 
-        return null;
+        return (WheelGeometry.HitTest(dx, dy, _items.Count), null, false);
     }
 
-    private void Paint(int i, bool highlighted)
+    // The highlighted wedge; while one of its presets is highlighted it keeps only an accent outline.
+    private void SetWedge(int? index, bool highlighted)
+    {
+        if (_highlighted is { } old && old != index)
+        {
+            Paint(old, highlighted: false);
+        }
+
+        if (index is { } i)
+        {
+            Paint(i, highlighted, outline: !highlighted);
+        }
+
+        _highlighted = index;
+    }
+
+    private void SetChoice(int? index)
+    {
+        if (index == _highlightedChoice)
+        {
+            return;
+        }
+
+        var p = _palette;
+        for (var i = 0; i < _choices.Count; i++)
+        {
+            var on = i == index;
+            _choices[i].Wedge.Fill = on ? p.Accent : p.Base;
+            _choices[i].Wedge.Stroke = on ? p.Accent : p.Stroke;
+            _choices[i].Label.Foreground = on ? p.OnAccent : p.Label;
+        }
+
+        _highlightedChoice = index;
+    }
+
+    private void Expand(int wedge)
+    {
+        var choices = _items[wedge].Choices!;
+        // Nearly invisible but not see-through: keeps the drag on the wheel across the gap to the ring.
+        _canvas.Children.Add(new Path { Data = WheelGeometry.ChoiceBand(wedge, _items.Count, choices.Count, Centre), Fill = Band });
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var path = new Path { Data = WheelGeometry.Choice(wedge, _items.Count, i, choices.Count, Centre), StrokeThickness = 1 };
+            var anchor = WheelGeometry.PointAt(WheelGeometry.ChoiceAngle(wedge, _items.Count, i, choices.Count), WheelGeometry.RingContentRadius);
+            var label = Text(choices[i].Label, 10.5, FontWeights.SemiBold, anchor);
+            _canvas.Children.Add(path);
+            _canvas.Children.Add(label);
+            _choices.Add((path, label));
+        }
+
+        _expanded = wedge;
+        _highlightedChoice = -1; // makes SetChoice paint every preset
+        SetChoice(null);
+    }
+
+    private void Collapse()
+    {
+        if (_expanded is null)
+        {
+            return;
+        }
+
+        var added = 1 + 2 * _choices.Count; // the band, then a wedge and a label per preset, all on top
+        _canvas.Children.RemoveRange(_canvas.Children.Count - added, added);
+        _choices.Clear();
+        _expanded = null;
+        _highlightedChoice = null;
+    }
+
+    private void Paint(int i, bool highlighted, bool outline = false)
     {
         var (wedge, icon, label) = _wedges[i];
         var p = _palette;
         wedge.Fill = highlighted ? p.Accent : p.Wedge;
-        wedge.Stroke = highlighted ? p.Accent : p.Stroke;
+        wedge.Stroke = highlighted || outline ? p.Accent : p.Stroke;
+        wedge.StrokeThickness = outline ? 2 : 1;
         icon.Foreground = highlighted ? p.OnAccent : p.Icon;
         label.Foreground = highlighted ? p.OnAccent : p.Label;
+    }
+
+    private static readonly Brush Band = FrozenBrush(Color.FromArgb(1, 0, 0, 0));
+
+    private static Brush FrozenBrush(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
     }
 
     private static Ellipse Circle(double radius, Brush fill, Brush stroke, Effect? effect = null)

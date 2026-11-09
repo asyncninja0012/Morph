@@ -41,6 +41,13 @@ public sealed class OutputNamer(string outputDirectory)
         return outputs;
     }
 
+    /// <summary>Deletes one output the engine decided not to make (e.g. a file Compress couldn't make smaller).</summary>
+    public void Discard(PendingOutput output)
+    {
+        File.Delete(output.Path);
+        _reserved.Remove(output.Path);
+    }
+
     /// <summary>Deletes every output reserved so far (failure or cancel).</summary>
     public void AbortAll()
     {

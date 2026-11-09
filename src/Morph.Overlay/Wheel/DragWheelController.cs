@@ -249,8 +249,7 @@ public sealed class DragWheelController : IDisposable
             _oleDragsInside++;
         }
 
-        var item = _wheel.ItemAt(e);
-        _wheel.Highlight(item);
+        var item = _wheel.Hover(e);
         // Copy only, so the source never moves or deletes the original.
         e.Effects = item is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
@@ -258,7 +257,7 @@ public sealed class DragWheelController : IDisposable
 
     private void OnWheelDragLeave(object sender, DragEventArgs e)
     {
-        _wheel.Highlight(null);
+        _wheel.ClearHover();
         OnOleLeave();
     }
 

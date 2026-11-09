@@ -2,6 +2,7 @@ using System.Formats.Tar;
 using System.Globalization;
 using System.IO.Compression;
 using System.Numerics;
+using System.Text.Json.Nodes;
 
 using ImageMagick;
 
@@ -128,6 +129,75 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
+    public static TheoryData<string, string, string> ToolRows()
+    {
+        var rows = new TheoryData<string, string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool is "compress" or "resize"))
+        {
+            rows.Add(r.In, r.Tool, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // Compress runs the Small preset (the fixtures are tiny, so Balanced may already be beaten) and must shrink the file;
+    // resize runs the wedge default (50%). Both keep the format (other video → MP4, WAV/FLAC → M4A) and the look or duration.
+    [Theory]
+    [MemberData(nameof(ToolRows))]
+    public async Task Tool_row_runs(string from, string tool, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{(from == "pdf" ? "jpg" : from)}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        if (engine == "media")
+        {
+            Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+            Assert.SkipWhen(FileFormat.FromExtension(from).Kind == FileKind.Video && from != "webm" && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null,
+                "no H.264 encoder on this machine");
+        }
+
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+        if (from == "pdf")
+        {
+            input = Assert.Single((await RunAsync("convert.pdf", "pdf", [input], ct)).Outputs); // sample.pdf has no photo to shrink
+        }
+
+        var parameters = Matrix.Tool(tool)!.ParametersFor(tool == "compress" ? "small" : null);
+        var output = Assert.Single((await RunAsync(tool, engine, [input], ct, parameters)).Outputs);
+        var to = from switch
+        {
+            "mov" or "avi" or "wmv" => "mp4",
+            "wav" or "flac" => "m4a",
+            _ => from,
+        };
+        Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
+        Assert.EndsWith(tool == "compress" ? "-compressed" : "-resized", Path.GetFileNameWithoutExtension(output), StringComparison.Ordinal);
+        if (tool == "compress")
+        {
+            Assert.True(new FileInfo(output).Length < new FileInfo(input).Length, $"{new FileInfo(output).Length} >= {new FileInfo(input).Length}");
+        }
+
+        if (from == "pdf")
+        {
+            AssertLooksTheSame(fixture, Assert.Single(await RenderAsync(output, ct)), sameSize: false);
+        }
+        else if (engine == "imaging")
+        {
+            using var a = new MagickImage(input);
+            using var b = new MagickImage(output);
+            Assert.Equal(tool == "resize" ? (a.Width / 2, a.Height / 2) : (a.Width, a.Height), (b.Width, b.Height));
+            AssertLooksTheSame(input, output, sameSize: false);
+        }
+        else
+        {
+            var (inDuration, inSize, _) = await ProbeAsync(input, ct);
+            var (outDuration, outSize, _) = await ProbeAsync(output, ct);
+            Assert.InRange(outDuration, inDuration - 0.1, inDuration + 0.1);
+            Assert.Equal(tool == "resize" ? "160x120" : inSize, outSize);
+        }
+    }
+
     [Fact]
     public async Task Merge_puts_pdfs_and_images_into_one_pdf_in_order()
     {
@@ -149,10 +219,10 @@ public sealed class GoldenTests : IDisposable
         AssertLooksTheSame(inputs[2], pages[3], sameSize: false);
     }
 
-    private async Task<JobResult> RunAsync(string tool, string engine, string[] inputs, CancellationToken ct)
+    private async Task<JobResult> RunAsync(string tool, string engine, string[] inputs, CancellationToken ct, JsonObject? parameters = null)
     {
         var result = await WorkerClient.RunAsync(WorkerPath,
-            new JobRequest(Guid.NewGuid(), tool, engine, inputs, _dir, Matrix.Tool(tool)?.Defaults?.DeepClone().AsObject()),
+            new JobRequest(Guid.NewGuid(), tool, engine, inputs, _dir, parameters ?? Matrix.Tool(tool)?.Defaults?.DeepClone().AsObject()),
             new SyncProgress<JobProgress>(_ => { }), ct);
         Assert.True(result.Status == JobStatus.Succeeded, $"{result.UserMessage} {result.Details}");
         return result;

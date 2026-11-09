@@ -57,11 +57,33 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void Merge_needs_two_files_it_can_put_in_a_pdf()
     {
-        Assert.Empty(Ids([FileFormat.Pdf], WheelGroup.Tools));
-        Assert.Equal(["merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["compress"], Ids([FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["compress", "merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
         Assert.Equal(["merge"], Ids([FileFormat.Heic, FileFormat.Pdf, FileFormat.Png], WheelGroup.Tools));
-        Assert.Empty(Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
-        Assert.Equal(["merge"], Ids([], WheelGroup.Tools));
+        Assert.Equal(["compress"], Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
+        Assert.Equal(["compress", "resize", "merge"], Ids([], WheelGroup.Tools));
+    }
+
+    [Fact]
+    public void Fit_under_presets_show_only_for_video_and_pdf()
+    {
+        static string[] Choices(params FileFormat[] files) =>
+            [.. Shipped.OptionsFor(files, WheelGroup.Tools).Single(o => o.Tool.Id == "compress").Choices.Select(c => c.Id)];
+
+        Assert.Equal(["small", "balanced", "high", "10mb", "25mb"], Choices(FileFormat.Mp4, FileFormat.Pdf));
+        Assert.Equal(["small", "balanced", "high"], Choices(FileFormat.Mp4, FileFormat.Jpg));
+        Assert.Equal(["small", "balanced", "high"], Choices(FileFormat.FromExtension("mp3")));
+        Assert.Equal(["resize"], Ids([FileFormat.Jpg, FileFormat.Mov], WheelGroup.Tools).Where(i => i == "resize"));
+    }
+
+    [Fact]
+    public void A_preset_adds_its_parameters_to_the_tools()
+    {
+        var compress = Shipped.Tool("compress")!;
+
+        Assert.Equal("""{"preset":"balanced"}""", compress.ParametersFor(null)!.ToJsonString());
+        Assert.Equal("""{"preset":"balanced","targetMb":25}""", compress.ParametersFor("25mb")!.ToJsonString());
+        Assert.Equal("""{"preset":"small"}""", compress.ParametersFor("small")!.ToJsonString());
     }
 
     [Fact]

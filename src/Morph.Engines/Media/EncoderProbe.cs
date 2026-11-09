@@ -4,7 +4,32 @@ using System.Text.Json.Serialization;
 namespace Morph.Engines.Media;
 
 /// <summary>An H.264 encoder ffmpeg can actually use on this machine, with its quality settings.</summary>
-public sealed record VideoEncoder(string Name, IReadOnlyList<string> Args);
+/// <param name="Args">Default quality (constant quality 23), used by conversions.</param>
+public sealed record VideoEncoder(string Name, IReadOnlyList<string> Args)
+{
+    /// <summary>Constant quality on x264's CRF-like scale: 23 is the default, higher is smaller (Compress presets, IT-1).</summary>
+    public string[] Quality(int cq) => Name switch
+    {
+        "h264_nvenc" => ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", $"{cq}", "-b:v", "0"],
+        "h264_qsv" => ["-c:v", "h264_qsv", "-preset", "medium", "-global_quality", $"{cq}"],
+        "h264_amf" => ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", $"{cq - 1}", "-qp_p", $"{cq + 1}"],
+        // Media Foundation's 0–100 quality, higher is better: 23 → 70 as above, about 4 points per step.
+        _ => [.. MediaFoundation, "-rate_control", "quality", "-quality", $"{Math.Clamp(70 - (cq - 23) * 4, 10, 100)}"],
+    };
+
+    /// <summary>Average bit rate, for "fit under X MB".</summary>
+    public string[] Bitrate(int kbps) => Name switch
+    {
+        "h264_nvenc" => ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", .. Rate(kbps)],
+        "h264_qsv" => ["-c:v", "h264_qsv", "-preset", "medium", .. Rate(kbps)],
+        "h264_amf" => ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "vbr_peak", .. Rate(kbps)],
+        _ => [.. MediaFoundation, "-rate_control", "cbr", "-b:v", $"{kbps}k"],
+    };
+
+    private string[] MediaFoundation => Name == "h264_mf hardware" ? ["-c:v", "h264_mf", "-hw_encoding", "1"] : ["-c:v", "h264_mf"];
+
+    private static string[] Rate(int kbps) => ["-b:v", $"{kbps}k", "-maxrate", $"{kbps * 3 / 2}k", "-bufsize", $"{kbps * 2}k"];
+}
 
 /// <summary>
 /// Finds the first working H.264 encoder by test-encoding one frame with each (PLAN §5): NVENC → QSV → AMF →
@@ -12,7 +37,7 @@ public sealed record VideoEncoder(string Name, IReadOnlyList<string> Args);
 /// </summary>
 public sealed class EncoderProbe(Ffmpeg ffmpeg, string cacheDirectory)
 {
-    // Constant-quality settings at roughly "visually lossless for sharing"; per-preset tuning comes with Compress (2.7).
+    // Constant-quality settings at roughly "visually lossless for sharing"; Compress uses VideoEncoder.Quality/Bitrate.
     internal static readonly VideoEncoder[] H264Candidates =
     [
         new("h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0"]),

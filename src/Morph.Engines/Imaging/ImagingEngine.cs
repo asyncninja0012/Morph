@@ -7,7 +7,7 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
-/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp.
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress and resize (IT-1, IT-2) keep the format.
 /// </summary>
 public sealed class ImagingEngine : IEngine
 {
@@ -47,6 +47,12 @@ public sealed class ImagingEngine : IEngine
 
     public async Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
+        if (job.ToolId is "compress" or "resize")
+        {
+            await ShrinkAsync(job, namer, progress, ct).ConfigureAwait(false);
+            return;
+        }
+
         var target = job.ToolId.StartsWith("convert.", StringComparison.Ordinal) ? job.ToolId["convert.".Length..] : "";
         if (!Targets.TryGetValue(target, out var outFormat))
         {
@@ -83,6 +89,84 @@ public sealed class ImagingEngine : IEngine
 
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
         }
+    }
+
+    // A file already small enough is skipped; the job fails only when every file was.
+    private static async Task ShrinkAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var compress = job.ToolId == "compress";
+        string? skipped = null;
+        var made = 0;
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var input = job.Inputs[i];
+            var name = Path.GetFileName(input);
+            var format = Targets[(await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id];
+            using var image = await ReadAsync(input, ct).ConfigureAwait(false);
+            var size = compress ? Compress(image, format, Presets.Compress(job.Parameters)) : Presets.Resize((int)image.Width, (int)image.Height, job.Parameters);
+            if (!compress && size is null)
+            {
+                skipped = $"{name} is already that small.";
+                continue;
+            }
+
+            if (size is var (width, height))
+            {
+                image.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
+            }
+
+            var pending = namer.Reserve(input, Path.GetExtension(input), compress ? "-compressed" : "-resized");
+            await using (var output = new FileStream(pending.Path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            {
+                await image.WriteAsync(output, format, ct).ConfigureAwait(false);
+            }
+
+            if (compress && new FileInfo(pending.Path).Length >= new FileInfo(input).Length)
+            {
+                namer.Discard(pending);
+                skipped = $"{name} is already as small as Morph can make it at this setting.";
+            }
+            else
+            {
+                made++;
+            }
+
+            progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
+        }
+    }
+
+    // Small and Balanced also cap the long edge: a 12 MP phone photo is mostly pixels no email reader sees.
+    // PNG has no quality knob; Small and Balanced reduce it to 128/256 colours (what TinyPNG-style tools do), High stays lossless.
+    private static (int Width, int Height)? Compress(MagickImage image, MagickFormat format, Preset preset)
+    {
+        var (edge, quality, colours) = preset switch
+        {
+            Preset.Small => (1600, 65u, 128u),
+            Preset.Balanced => (2560, 78u, 256u),
+            _ => (int.MaxValue, 88u, 0u),
+        };
+        if (format == MagickFormat.Png)
+        {
+            if (colours > 0)
+            {
+                image.Quantize(new QuantizeSettings { Colors = colours, DitherMethod = DitherMethod.FloydSteinberg });
+            }
+
+            image.Quality = 95; // zlib level 9, adaptive filtering
+        }
+        else
+        {
+            // AVIF's scale sits lower: Magick writes it at 50 unless told otherwise, about what JPEG looks like at 78.
+            image.Quality = format == MagickFormat.Avif ? quality - 35 : quality;
+        }
+
+        return Presets.Fit((int)image.Width, (int)image.Height, edge);
     }
 
     /// <summary>Reads the first frame of an image, upright. Also used to put images into PDFs.</summary>

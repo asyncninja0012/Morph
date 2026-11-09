@@ -41,4 +41,30 @@ public sealed class WheelGeometryTests
             }
         }
     }
+
+    [Fact]
+    public void Presets_fan_out_around_their_wedge()
+    {
+        // 6 wedges, wedge 1 at 60°; 3 presets at 26°, 60°, 94°.
+        Assert.Equal(26, WheelGeometry.ChoiceAngle(1, 6, 0, 3), 6);
+        for (var i = 0; i < 3; i++)
+        {
+            var p = WheelGeometry.PointAt(WheelGeometry.ChoiceAngle(1, 6, i, 3), WheelGeometry.RingContentRadius);
+            Assert.Equal(i, WheelGeometry.HitTestChoice(p.X, p.Y, 1, 6, 3));
+        }
+    }
+
+    [Theory]
+    [InlineData(60, 100)]  // on the disc: the wedges' business
+    [InlineData(60, 190)]  // past the ring
+    [InlineData(150, 150)] // on the ring, beside the presets
+    public void Outside_the_presets_is_no_preset(double angle, double radius)
+    {
+        var p = WheelGeometry.PointAt(angle, radius);
+        Assert.Null(WheelGeometry.HitTestChoice(p.X, p.Y, 1, 6, 3));
+    }
+
+    [Fact]
+    public void The_gap_between_disc_and_ring_counts_as_the_preset() =>
+        Assert.Equal(1, WheelGeometry.HitTestChoice(WheelGeometry.PointAt(60, 122).X, WheelGeometry.PointAt(60, 122).Y, 1, 6, 3));
 }
