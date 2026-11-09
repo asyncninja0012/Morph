@@ -52,6 +52,8 @@
     {"id": "extract-audio", "label": "Extract audio", "glyph": "", "hint": "Save the sound on its own", "wheel": "Tools"},
     {"id": "mute", "label": "Mute", "glyph": "", "hint": "Remove the sound", "wheel": "Tools"},
     {"id": "make-gif", "label": "Make GIF", "glyph": "", "hint": "Turn it into a looping GIF", "wheel": "Tools"},
+    {"id": "protect", "label": "Protect", "glyph": "", "hint": "Lock it with a password", "wheel": "Tools"},
+    {"id": "unlock", "label": "Unlock", "glyph": "", "hint": "Remove the password", "wheel": "Tools"},
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Join into one file, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
@@ -187,6 +189,10 @@
     {"in": "tiff", "out": "pdf", "tool": "convert", "engine": "pdf"},
     {"in": "heic", "out": "pdf", "tool": "convert", "engine": "pdf"},
     {"in": "avif", "out": "pdf", "tool": "convert", "engine": "pdf"},
+    {"in": "pdf", "tool": "protect", "engine": "pdf"},
+    {"in": "pdf", "tool": "unlock", "engine": "pdf"},
+    {"in": "zip", "tool": "protect", "engine": "archive"},
+    {"in": "zip", "tool": "unlock", "engine": "archive"},
     {"in": "pdf", "tool": "merge", "engine": "pdf"},
     {"in": "jpg", "tool": "merge", "engine": "pdf"},
     {"in": "png", "tool": "merge", "engine": "pdf"},

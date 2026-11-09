@@ -12,8 +12,8 @@ namespace Morph.Engines.Archives;
 /// "name.tar.gz"; a ".gz" that holds a TAR is read as that TAR, any other ".gz" as the one file inside it.
 /// Tool ids: convert.zip, convert.tar, convert.gz.
 /// </summary>
-// shortcut: TAR symlinks, hard links and device entries are skipped (ZIP can't hold them portably); encrypted ZIPs wait for 2.9.
-public sealed class ArchiveEngine : IEngine
+// shortcut: TAR symlinks, hard links and device entries are skipped (ZIP can't hold them portably). Protect/unlock: ZipPassword.cs.
+public sealed partial class ArchiveEngine : IEngine
 {
     private const long MaxExpandedBytes = 10L << 30; // PLAN §5: 10 GB expansion
     private const int MaxEntries = 100_000;
@@ -25,6 +25,12 @@ public sealed class ArchiveEngine : IEngine
 
     public async Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
+        if (job.ToolId is "protect" or "unlock")
+        {
+            await PasswordAsync(job, namer, progress, ct).ConfigureAwait(false);
+            return;
+        }
+
         var target = job.ToolId switch
         {
             "convert.zip" => "zip",

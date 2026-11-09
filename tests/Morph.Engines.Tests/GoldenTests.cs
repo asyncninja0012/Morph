@@ -340,6 +340,120 @@ public sealed class GoldenTests : IDisposable
         return stdout.Contains("Secret", StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, string> PasswordRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "protect"))
+        {
+            Assert.Contains(Matrix.Rows, u => u.Tool == "unlock" && u.In == r.In && u.Engine == r.Engine);
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // IT-5: protect locks a copy, a wrong password fails plainly, unlock with the right one gives the content back.
+    [Theory]
+    [MemberData(nameof(PasswordRows))]
+    public async Task Protect_and_unlock_row_round_trips(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var input = Path.Combine(_dir, $"sample.{from}");
+        File.Copy(Path.Combine(Fixtures, $"sample.{from}"), input);
+        const string Password = "Pässwörd 1";
+
+        var locked = Assert.Single((await RunAsync("protect", engine, [input], ct, new() { ["password"] = Password })).Outputs);
+        Assert.Equal(Path.Combine(_dir, $"sample-protected.{from}"), locked);
+        Assert.True(IsLocked(locked), "the copy opens without the password");
+        Assert.False(IsLocked(input), "the original changed");
+
+        Assert.Equal($"That password doesn't open sample-protected.{from}.", (await TryRunAsync("unlock", engine, [locked], "wrong", ct)).UserMessage);
+        Assert.Equal($"sample.{from} isn't password-protected.", (await TryRunAsync("unlock", engine, [input], Password, ct)).UserMessage);
+        Assert.Equal($"sample-protected.{from} is already password-protected.", (await TryRunAsync("protect", engine, [locked], Password, ct)).UserMessage);
+
+        var unlocked = Assert.Single((await RunAsync("unlock", engine, [locked], ct, new() { ["password"] = Password })).Outputs);
+        Assert.Equal(Path.Combine(_dir, $"sample-protected-unlocked.{from}"), unlocked);
+        Assert.False(IsLocked(unlocked));
+        Assert.Equal(Contents(input), Contents(unlocked));
+    }
+
+    // Other apps' files: a PDF whose password only opens it (the owner password differs), and a ZIP with old ZipCrypto.
+    [Fact]
+    public async Task Unlock_takes_an_open_only_pdf_password_and_old_zip_encryption()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pdf = Path.Combine(_dir, "open-only.pdf");
+        using (var document = SharpReader.Open(Path.Combine(Fixtures, "sample.pdf"), PdfDocumentOpenMode.Modify))
+        {
+            document.SecuritySettings.UserPassword = "user";
+            document.SecuritySettings.OwnerPassword = "owner";
+            document.Save(pdf);
+        }
+
+        var zip = Path.Combine(_dir, "old.zip");
+        using (var output = new ICSharpCode.SharpZipLib.Zip.ZipOutputStream(File.Create(zip)) { Password = "user" })
+        {
+            output.PutNextEntry(new ICSharpCode.SharpZipLib.Zip.ZipEntry("notes/a.txt"));
+            output.Write("hello"u8);
+        }
+
+        var outputs = new List<string>();
+        foreach (var (file, engine) in new[] { (pdf, "pdf"), (zip, "archive") })
+        {
+            outputs.Add(Assert.Single((await RunAsync("unlock", engine, [file], ct, new() { ["password"] = "user" })).Outputs));
+        }
+
+        Assert.All(outputs, o => Assert.False(IsLocked(o)));
+        Assert.Equal(Contents(Path.Combine(Fixtures, "sample.pdf")), Contents(outputs[0]));
+        Assert.Equal(["notes/a.txt:hello"], Contents(outputs[1]));
+    }
+
+    private async Task<JobResult> TryRunAsync(string tool, string engine, string[] inputs, string password, CancellationToken ct)
+    {
+        var result = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), tool, engine, inputs, _dir, new() { ["password"] = password }),
+            new SyncProgress<JobProgress>(_ => { }), ct);
+        Assert.Equal(JobStatus.Failed, result.Status);
+        return result;
+    }
+
+    private static bool IsLocked(string path)
+    {
+        if (path.EndsWith(".zip", StringComparison.Ordinal))
+        {
+            using var zip = new ICSharpCode.SharpZipLib.Zip.ZipFile(path);
+            return zip.Cast<ICSharpCode.SharpZipLib.Zip.ZipEntry>().Any(e => e.IsCrypted);
+        }
+
+        var asked = false;
+        try
+        {
+            SharpReader.Open(path, PdfDocumentOpenMode.Import, args =>
+            {
+                asked = true;
+                args.Abort = true;
+            })?.Dispose();
+        }
+        catch when (asked)
+        {
+            // the aborted prompt
+        }
+
+        return asked;
+    }
+
+    // What a reader sees: each page's text for a PDF, "name:text" per file for a ZIP.
+    private static List<string> Contents(string path)
+    {
+        if (path.EndsWith(".zip", StringComparison.Ordinal))
+        {
+            using var zip = ZipFile.OpenRead(path);
+            return [.. zip.Entries.Select(e => e.FullName + ":" + (e.FullName.EndsWith('/') ? "" : new StreamReader(e.Open()).ReadToEnd()))];
+        }
+
+        using var document = UglyToad.PdfPig.PdfDocument.Open(path);
+        return [.. document.GetPages().Select(p => p.Text)];
+    }
+
     [Fact]
     public async Task Merge_joins_videos_and_sounds_in_order()
     {

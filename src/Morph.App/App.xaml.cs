@@ -169,6 +169,16 @@ public sealed partial class App : Application
             return;
         }
 
+        // Protect and Unlock ask for the password (IT-5).
+        if (item.Id is "protect" or "unlock")
+        {
+            var password = new PasswordWindow(files.Paths, unlock: item.Id == "unlock");
+            password.RunClicked += p => Enqueue(item, files, new() { ["password"] = p });
+            password.Show();
+            password.Activate();
+            return;
+        }
+
         // The Compress and Resize wedges ask for settings first; Compress's ring presets run at once.
         if (item.Id is "compress" or "resize")
         {
@@ -197,7 +207,8 @@ public sealed partial class App : Application
     /// <param name="parameters">From a settings window; null = the tool's (or ring preset's) defaults.</param>
     private void Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null)
     {
-        _log.LogInformation("{Tool} parameters: {Parameters}", item.Id, parameters?.ToJsonString() ?? "defaults");
+        _log.LogInformation("{Tool} parameters: {Parameters}", item.Id,
+            parameters is null ? "defaults" : parameters.ContainsKey("password") ? "(password)" : parameters.ToJsonString()); // never log a password
         // Files already in the target format are skipped. Output goes next to each original; virtual files
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
         // Merge makes one file, so it's one job, saved next to the first file.

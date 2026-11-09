@@ -57,6 +57,10 @@ PDFsharp 6.2.4
 https://github.com/empira/PDFsharp
 Licence: MIT (https://github.com/empira/PDFsharp/blob/master/LICENSE)
 --------------------------------------------------------------------------------
+SharpZipLib 1.4.2
+https://github.com/icsharpcode/SharpZipLib
+Licence: MIT (https://github.com/icsharpcode/SharpZipLib/blob/master/LICENSE.txt)
+--------------------------------------------------------------------------------
 System.Security.Cryptography.Pkcs 10.0.13 (used by PDFsharp)
 https://github.com/dotnet/dotnet
 Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)

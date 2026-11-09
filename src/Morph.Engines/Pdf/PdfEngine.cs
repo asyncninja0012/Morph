@@ -43,6 +43,12 @@ public sealed class PdfEngine : IEngine
             return;
         }
 
+        if (job.ToolId is "protect" or "unlock")
+        {
+            PdfPassword.Run(job, namer, progress, ct);
+            return;
+        }
+
         var target = job.ToolId switch
         {
             "convert.jpg" => MagickFormat.Jpeg,

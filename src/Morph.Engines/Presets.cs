@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 
+using Morph.Core.Jobs;
+
 namespace Morph.Engines;
 
 internal enum Preset { Small, Balanced, High }
@@ -68,6 +70,10 @@ internal static class Presets
         var flip = (string?)parameters?["flip"] is "horizontal" or "vertical" ? (string?)parameters?["flip"] : null;
         return turn is not (0 or 90 or 180 or 270) || (turn == 0 && flip is null) ? (90, null) : (turn, flip);
     }
+
+    /// <summary>Protect/unlock (IT-5): { "password": "..." } from the password window. It never goes to a log or a file name.</summary>
+    public static string Password(JsonObject? parameters) =>
+        (string?)parameters?["password"] is { Length: > 0 } password ? password : throw new EngineException("Type a password first.", "no password parameter");
 
     // Any JSON number: a JsonObject built in code holds an int where parsed JSON would give a double.
     private static double? Number(JsonNode? node) =>
