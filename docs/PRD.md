@@ -67,6 +67,8 @@ Keyboard path, no bloat
 • ED-3 Redact (images, PDF): drag boxes; for PDFs the text and images under each box are removed from the file, not only covered.
 • ED-4 Trim and split (video, audio): player, filmstrip, in/out handles, multiple split points, "fast cut" (no re-encode, snaps to keyframes) vs "exact cut".
 • ED-5 PDF page organizer: thumbnails to reorder, rotate, delete, extract a range, split into files.
+• ED-7 Change speed (video, audio): player that plays at the chosen speed, slider with stops 0.25×, 0.5×, 1×, 1.5×, 2×, 4×; sound keeps its pitch.
+• ED-8 Save frames (video): player, scrub bar, step one frame back/forward, "Add frame" collects any number of frames as thumbnails with their time (each removable), then "Save N frames" writes full-resolution PNGs.
 • ED-6 Every editor: Enter = Done, Esc = Cancel, Ctrl+Z = Undo; remembers last settings per tool; multi-file drops offer "apply to all" or "step through".
 6.5 File actions
 • FA-1 Float: an always-on-top shelf at a screen edge that holds dropped files and lets them be dragged out later. Survives restart; cleared manually.
