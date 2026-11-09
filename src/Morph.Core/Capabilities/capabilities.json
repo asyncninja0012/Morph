@@ -23,6 +23,13 @@
     {"id": "convert.docx", "label": "DOCX", "glyph": "", "hint": "Convert to a Word document", "wheel": "Convert"},
     {"id": "convert.md", "label": "MD", "glyph": "", "hint": "Convert to Markdown", "wheel": "Convert"},
     {"id": "convert.html", "label": "HTML", "glyph": "", "hint": "Convert to a web page", "wheel": "Convert"},
+    {"id": "convert.xlsx", "label": "XLSX", "glyph": "", "hint": "Convert to an Excel workbook", "wheel": "Convert"},
+    {"id": "convert.csv", "label": "CSV", "glyph": "", "hint": "Convert to CSV (one file per sheet)", "wheel": "Convert"},
+    {"id": "convert.srt", "label": "SRT", "glyph": "", "hint": "Convert to SRT subtitles", "wheel": "Convert"},
+    {"id": "convert.vtt", "label": "VTT", "glyph": "", "hint": "Convert to WebVTT subtitles", "wheel": "Convert"},
+    {"id": "convert.zip", "label": "ZIP", "glyph": "", "hint": "Repack as a ZIP", "wheel": "Convert"},
+    {"id": "convert.tar", "label": "TAR", "glyph": "", "hint": "Repack as a TAR", "wheel": "Convert"},
+    {"id": "convert.gz", "label": "TAR.GZ", "glyph": "", "hint": "Repack as a gzipped TAR", "wheel": "Convert"},
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Merge into one PDF, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
@@ -183,6 +190,16 @@
     {"in": "md", "out": "pdf", "tool": "convert", "engine": "document"},
     {"in": "html", "out": "pdf", "tool": "convert", "engine": "document"},
     {"in": "txt", "out": "pdf", "tool": "convert", "engine": "document"},
-    {"in": "pdf", "out": "docx", "tool": "convert", "engine": "document", "beta": true}
+    {"in": "pdf", "out": "docx", "tool": "convert", "engine": "document", "beta": true},
+    {"in": "csv", "out": "xlsx", "tool": "convert", "engine": "sheet"},
+    {"in": "xlsx", "out": "csv", "tool": "convert", "engine": "sheet"},
+    {"in": "srt", "out": "vtt", "tool": "convert", "engine": "subtitle"},
+    {"in": "vtt", "out": "srt", "tool": "convert", "engine": "subtitle"},
+    {"in": "zip", "out": "tar", "tool": "convert", "engine": "archive"},
+    {"in": "zip", "out": "gz", "tool": "convert", "engine": "archive"},
+    {"in": "tar", "out": "zip", "tool": "convert", "engine": "archive"},
+    {"in": "tar", "out": "gz", "tool": "convert", "engine": "archive"},
+    {"in": "gz", "out": "zip", "tool": "convert", "engine": "archive"},
+    {"in": "gz", "out": "tar", "tool": "convert", "engine": "archive"}
   ]
 }

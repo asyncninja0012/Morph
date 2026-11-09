@@ -1,4 +1,6 @@
+using System.Formats.Tar;
 using System.Globalization;
+using System.IO.Compression;
 using System.Numerics;
 
 using ImageMagick;
@@ -6,8 +8,11 @@ using ImageMagick;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
+using Morph.Engines;
 using Morph.Engines.Documents;
 using Morph.Engines.Media;
+using Morph.Engines.Sheets;
+using Morph.Engines.Subtitles;
 
 namespace Morph.Engines.Tests;
 
@@ -94,6 +99,19 @@ public sealed class GoldenTests : IDisposable
         if (engine == "document")
         {
             await AssertSameDocumentAsync(input, output, from, to, ct);
+        }
+        else if (engine == "sheet")
+        {
+            var grid = to == "csv" ? Csv.Parse(await TextFiles.ReadAsync(output, ct)) : Assert.Single(SheetEngine.ReadXlsx(output, ct)).Rows;
+            Assert.Equal(SampleGrid, grid);
+        }
+        else if (engine == "subtitle")
+        {
+            Assert.Equal(SampleCues, await SubtitleEngine.ReadAsync(output, ct));
+        }
+        else if (engine == "archive")
+        {
+            Assert.Equal(SampleFiles, await ArchivedFilesAsync(output, ct));
         }
         else if (to == "pdf")
         {
@@ -207,6 +225,54 @@ public sealed class GoldenTests : IDisposable
         }
 
         return hash;
+    }
+
+    // gen-fixtures writes the same grid, cues and files in each format; these are written out by hand, not read from a fixture.
+    private static readonly List<List<string>> SampleGrid =
+    [
+        ["Name", "Amount", "Date", "Note"],
+        ["Apple", "1.5", "2023-03-15", "red, sweet"],
+        ["Banana", "20", "2024-01-01", "says \"hi\""],
+        ["Café", "-3", "", "line1\nline2"],
+    ];
+
+    private static readonly List<Cue> SampleCues =
+    [
+        new(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5), "Hello <i>world</i>"),
+        new(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(4), "Fish & chips\nsecond line"),
+    ];
+
+    private static readonly Dictionary<string, string> SampleFiles = new() { ["readme.txt"] = "hello", ["docs/notes.md"] = "# notes\n" };
+
+    // Read with the framework's own readers, not the engine: file name → text, folders left out.
+    private static async Task<Dictionary<string, string>> ArchivedFilesAsync(string path, CancellationToken ct)
+    {
+        var files = new Dictionary<string, string>();
+        if (path.EndsWith(".zip", StringComparison.Ordinal))
+        {
+            await using var zip = await ZipFile.OpenReadAsync(path, ct);
+            foreach (var entry in zip.Entries.Where(e => !e.FullName.EndsWith('/')))
+            {
+                using var reader = new StreamReader(await entry.OpenAsync(ct));
+                files[entry.FullName] = await reader.ReadToEndAsync(ct);
+            }
+
+            return files;
+        }
+
+        await using var file = File.OpenRead(path);
+        await using var stream = path.EndsWith(".gz", StringComparison.Ordinal) ? new GZipStream(file, CompressionMode.Decompress) : (Stream)file;
+        await using var tar = new TarReader(stream);
+        while (await tar.GetNextEntryAsync(copyData: false, ct) is { } entry)
+        {
+            if (entry.EntryType == TarEntryType.RegularFile)
+            {
+                using var reader = new StreamReader(entry.DataStream!);
+                files[entry.Name] = await reader.ReadToEndAsync(ct);
+            }
+        }
+
+        return files;
     }
 
     // The sample documents hold the same content (gen-fixtures); TXT keeps only the words.

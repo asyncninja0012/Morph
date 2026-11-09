@@ -205,5 +205,79 @@ using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "sample.do
     }
 }
 
+// Sheets: the same grid as CSV and as a hand-written XLSX (shared strings, numbers, date-formatted serials, a blank cell).
+File.WriteAllText(Path.Combine(dir, "sample.csv"), "Name,Amount,Date,Note\r\nApple,1.5,2023-03-15,\"red, sweet\"\r\nBanana,20,2024-01-01,\"says \"\"hi\"\"\"\r\nCafé,-3,,\"line1\nline2\"\r\n",
+    new System.Text.UTF8Encoding(false));
+const string S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+string[] shared = ["Name", "Amount", "Date", "Note", "Apple", "red, sweet", "Banana", "says \"hi\"", "Café", "line1\nline2"];
+static string C(string r, string v, string? t = null, int s = 0) => $"<c r=\"{r}\"{(t is null ? "" : $" t=\"{t}\"")}{(s == 0 ? "" : $" s=\"{s}\"")}><v>{v}</v></c>";
+var xlsx = new Dictionary<string, string>
+{
+    ["[Content_Types].xml"] = """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>""",
+    ["_rels/.rels"] = """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>""",
+    ["xl/_rels/workbook.xml.rels"] = """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>""",
+    ["xl/workbook.xml"] = $"""<workbook xmlns="{S}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Fruit" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+    ["xl/styles.xml"] = $"""<styleSheet xmlns="{S}"><fonts count="1"><font/></fonts><fills count="1"><fill/></fills><borders count="1"><border/></borders><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs></styleSheet>""",
+    ["xl/sharedStrings.xml"] = $"""<sst xmlns="{S}">{string.Concat(shared.Select(t => $"<si><t xml:space=\"preserve\">{System.Security.SecurityElement.Escape(t)}</t></si>"))}</sst>""",
+    ["xl/worksheets/sheet1.xml"] = $"""
+        <worksheet xmlns="{S}"><sheetData>
+        <row r="1">{C("A1", "0", "s")}{C("B1", "1", "s")}{C("C1", "2", "s")}{C("D1", "3", "s")}</row>
+        <row r="2">{C("A2", "4", "s")}{C("B2", "1.5")}{C("C2", "45000", s: 1)}{C("D2", "5", "s")}</row>
+        <row r="3">{C("A3", "6", "s")}{C("B3", "20")}{C("C3", "45292", s: 1)}{C("D3", "7", "s")}</row>
+        <row r="4">{C("A4", "8", "s")}{C("B4", "-3")}{C("D4", "9", "s")}</row>
+        </sheetData></worksheet>
+        """,
+};
+File.Delete(Path.Combine(dir, "sample.xlsx"));
+using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "sample.xlsx"), System.IO.Compression.ZipArchiveMode.Create))
+{
+    foreach (var (name, xml) in xlsx)
+    {
+        using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+        writer.Write(xml);
+    }
+}
+
+// Subtitles: the same two cues; the VTT also has a NOTE, cue settings, a cue id, a short timestamp and an entity.
+File.WriteAllText(Path.Combine(dir, "sample.srt"), "1\r\n00:00:01,000 --> 00:00:02,500\r\nHello <i>world</i>\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nFish & chips\r\nsecond line\r\n\r\n");
+File.WriteAllText(Path.Combine(dir, "sample.vtt"), "WEBVTT\n\nNOTE a comment\n\n00:01.000 --> 00:02.500 align:start\nHello <i>world</i>\n\nintro\n00:00:03.000 --> 00:00:04.000\nFish &amp; chips\nsecond line\n");
+
+// Archives: readme.txt, a docs folder and docs/notes.md, as ZIP, TAR and TAR.GZ ("sample.gz").
+(string Name, string? Text)[] archived = [("readme.txt", "hello"), ("docs", null), ("docs/notes.md", "# notes\n")];
+File.Delete(Path.Combine(dir, "sample.zip"));
+using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "sample.zip"), System.IO.Compression.ZipArchiveMode.Create))
+{
+    foreach (var (name, text) in archived)
+    {
+        var entry = zip.CreateEntry(text is null ? name + "/" : name);
+        if (text is not null)
+        {
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(text);
+        }
+    }
+}
+
+var tarBytes = new MemoryStream();
+using (var tar = new System.Formats.Tar.TarWriter(tarBytes, leaveOpen: true))
+{
+    foreach (var (name, text) in archived)
+    {
+        var entry = new System.Formats.Tar.PaxTarEntry(text is null ? System.Formats.Tar.TarEntryType.Directory : System.Formats.Tar.TarEntryType.RegularFile, name);
+        if (text is not null)
+        {
+            entry.DataStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)); // a directory can't take one, not even null
+        }
+
+        tar.WriteEntry(entry);
+    }
+}
+
+File.WriteAllBytes(Path.Combine(dir, "sample.tar"), tarBytes.ToArray());
+using (var gz = new System.IO.Compression.GZipStream(File.Create(Path.Combine(dir, "sample.gz")), System.IO.Compression.CompressionLevel.Optimal))
+{
+    gz.Write(tarBytes.ToArray());
+}
+
 Console.WriteLine($"Fixtures in {dir}");
 return 0;

@@ -69,6 +69,7 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
             "tif" => "tiff",
             "htm" => "html",
             "markdown" => "md",
+            "tgz" => "gz",
             var e => e,
         }) ?? Unknown;
 

@@ -51,7 +51,8 @@ public sealed class CapabilityMatrixTests
     public void No_files_offers_every_tool_of_the_wheel() =>
         Assert.Equal(["convert.png", "convert.jpg", "convert.webp", "convert.heic", "convert.avif", "convert.tiff", "convert.mp4", "convert.webm", "convert.mkv", "convert.avi",
             "convert.gif", "convert.mp3", "convert.m4a", "convert.wav", "convert.flac", "convert.ogg", "convert.opus", "convert.bmp", "convert.txt", "convert.pdf",
-            "convert.docx", "convert.md", "convert.html"], Ids([]));
+            "convert.docx", "convert.md", "convert.html", "convert.xlsx", "convert.csv", "convert.srt", "convert.vtt", "convert.zip", "convert.tar",
+            "convert.gz"], Ids([]));
 
     [Fact]
     public void Merge_needs_two_files_it_can_put_in_a_pdf()

@@ -3,10 +3,13 @@ using System.Text;
 using System.Text.Json;
 
 using Morph.Core.Jobs;
+using Morph.Engines.Archives;
 using Morph.Engines.Documents;
 using Morph.Engines.Imaging;
 using Morph.Engines.Media;
 using Morph.Engines.Pdf;
+using Morph.Engines.Sheets;
+using Morph.Engines.Subtitles;
 
 // Runs one job per process (PLAN §2): a JobRequest line on stdin, WorkerMessage lines on stdout.
 // stdin closing before the job ends means cancel. The App also kills this whole Job Object if we don't stop in time.
@@ -34,7 +37,7 @@ void Write(WorkerMessage message)
     }
 }
 
-IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine()];
+IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine()];
 var namer = new OutputNamer(request.OutputDirectory);
 JobResult result;
 try
