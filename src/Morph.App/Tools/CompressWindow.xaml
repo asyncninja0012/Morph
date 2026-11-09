@@ -1,0 +1,53 @@
+<Window x:Class="Morph.App.Tools.CompressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Compress" Width="420" SizeToContent="Height"
+        ThemeMode="System" ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Topmost="True" Background="Transparent">
+    <!-- Morph glass (MorphTheme): a warm tint over the Windows acrylic backdrop. -->
+    <Border Background="{DynamicResource MorphSurfaceBrush}" Padding="20,12,20,20">
+        <StackPanel>
+            <TextBlock x:Name="FilesText" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="SizeText" FontSize="15" Margin="0,10,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+
+            <TextBlock x:Name="PresetLabel" Text="Compression preset" FontSize="15" FontWeight="SemiBold" Margin="0,18,0,8"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <StackPanel x:Name="Presets" Orientation="Horizontal" AutomationProperties.LabeledBy="{Binding ElementName=PresetLabel}">
+                <RadioButton Tag="small" Content="Small" Style="{DynamicResource {x:Type ToggleButton}}" MinWidth="90" Margin="0,0,4,0" />
+                <RadioButton Tag="balanced" Content="Balanced" Style="{DynamicResource {x:Type ToggleButton}}" MinWidth="90" Margin="0,0,4,0" IsChecked="True" />
+                <RadioButton Tag="high" Content="High quality" Style="{DynamicResource {x:Type ToggleButton}}" MinWidth="90" />
+            </StackPanel>
+            <TextBlock x:Name="PresetHint" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+            <Grid x:Name="PictureRow" Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="PictureLabel" Text="Picture size" VerticalAlignment="Center" Margin="0,0,12,0"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <ComboBox x:Name="PictureSize" Grid.Column="1" SelectedIndex="0" AutomationProperties.LabeledBy="{Binding ElementName=PictureLabel}">
+                    <ComboBoxItem Content="Set by the preset" />
+                    <ComboBoxItem Tag="keep" Content="Keep original dimensions" />
+                    <ComboBoxItem Tag="2560" Content="Up to 2560 px" />
+                    <ComboBoxItem Tag="1920" Content="Up to 1080p (1920 × 1080)" />
+                    <ComboBoxItem Tag="1280" Content="Up to 720p (1280 × 720)" />
+                </ComboBox>
+            </Grid>
+
+            <Separator Margin="0,16,0,12" />
+
+            <CheckBox x:Name="TargetCheck" Content="Compress to target file size" />
+            <StackPanel x:Name="TargetRow" Orientation="Horizontal" Margin="28,6,0,0" IsEnabled="{Binding IsChecked, ElementName=TargetCheck}">
+                <TextBox x:Name="TargetBox" Text="10" Width="90" AutomationProperties.Name="Target size in megabytes" />
+                <TextBlock Text="MB" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
+            <TextBlock Text="Overrides the preset: quality goes as low as it needs to." Margin="28,6,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="0,0,8,0" />
+                <Button x:Name="RunButton" Content="Compress" IsDefault="True" MinWidth="96" Style="{DynamicResource AccentButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -38,13 +38,7 @@
         {"id": "10mb", "label": "Under 10 MB", "defaults": {"targetMb": 10}, "kinds": ["Video", "Pdf"]},
         {"id": "25mb", "label": "Under 25 MB", "defaults": {"targetMb": 25}, "kinds": ["Video", "Pdf"]}
       ]},
-    {"id": "resize", "label": "Resize", "glyph": "", "hint": "Make it smaller in pixels", "wheel": "Tools", "defaults": {"scale": 0.5},
-      "choices": [
-        {"id": "half", "label": "50%", "defaults": {"scale": 0.5}},
-        {"id": "1080p", "label": "1080p", "defaults": {"long": 1920, "short": 1080}},
-        {"id": "720p", "label": "720p", "defaults": {"long": 1280, "short": 720}},
-        {"id": "2048", "label": "2048 px", "defaults": {"long": 2048}}
-      ]},
+    {"id": "resize", "label": "Resize", "glyph": "", "hint": "Change the width and height in pixels", "wheel": "Tools", "defaults": {"scale": 0.5}},
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Merge into one PDF, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {

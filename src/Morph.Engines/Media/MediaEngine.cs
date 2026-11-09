@@ -182,20 +182,24 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
                 // Small and Balanced also cap the frame at 720p/1080p: most of a 4K phone clip's size is detail no upload keeps.
                 size = preset switch
                 {
-                    Preset.Small => Presets.Fit(info.Width, info.Height, 1280, 720),
-                    Preset.Balanced => Presets.Fit(info.Width, info.Height, 1920, 1080),
-                    _ => null,
+                    Preset.Small => Presets.CompressSize(info.Width, info.Height, job.Parameters, 1280, 720),
+                    Preset.Balanced => Presets.CompressSize(info.Width, info.Height, job.Parameters, 1920, 1080),
+                    _ => Presets.CompressSize(info.Width, info.Height, job.Parameters, int.MaxValue),
                 };
             }
             else if ((size = Presets.Resize(info.Width, info.Height, job.Parameters)) is null)
             {
-                skipped = $"{name} is already that small.";
+                skipped = $"{name} is already that size.";
                 continue;
             }
 
             var pending = namer.Reserve(input, "." + container, compress ? "-compressed" : "-resized");
             string? failure;
-            if (audioOnly)
+            if (audioOnly && limit is { } audioLimit)
+            {
+                failure = await FitAudioAsync(input, demuxer, info, container, audioLimit, pending.Path, fileProgress, ct).ConfigureAwait(false);
+            }
+            else if (audioOnly)
             {
                 await EncodeAsync(input, demuxer, AudioArgs(container, preset, info.AudioKbps), pending.Path, info, fileProgress, ct).ConfigureAwait(false);
                 failure = new FileInfo(pending.Path).Length >= new FileInfo(input).Length ? $"{name} is already as small as Morph can make it at this setting." : null;
@@ -255,6 +259,39 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             var video = await VideoArgsAsync(container, frame ?? size, quality: 0, (int)kbps, ct).ConfigureAwait(false);
             string[] audio = container == "webm" ? ["-c:a", "libopus", "-b:a", $"{audioKbps}k"] : ["-c:a", "aac", "-b:a", $"{audioKbps}k"];
             await EncodeAsync(input, demuxer, Video(video, audio, container), path, info, progress, ct).ConfigureAwait(false);
+            var written = new FileInfo(path).Length;
+            if (written <= limit)
+            {
+                return null;
+            }
+
+            kbps *= limit * 0.95 / written;
+        }
+
+        return $"Morph couldn't get {name} under {Presets.Megabytes(limit)} MB.";
+    }
+
+    // Constant bit rate makes audio size predictable: bytes ≈ kbps × seconds / 8. One retry if the container overhead tips it over.
+    private async Task<string?> FitAudioAsync(string input, string demuxer, MediaInfo info, string container, long limit, string path,
+        IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var name = Path.GetFileName(input);
+        if (info.Duration is not { } seconds)
+        {
+            return $"Morph can't tell how long {name} is, so it can't aim for a size.";
+        }
+
+        var kbps = limit * 8 * 0.95 / seconds / 1000;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            if (kbps < 24)
+            {
+                return $"{name} is too long to fit under {Presets.Megabytes(limit)} MB and still sound right.";
+            }
+
+            var args = AudioArgs(container, Preset.High, null);
+            args[Array.IndexOf(args, "-b:a") + 1] = $"{(int)kbps}k";
+            await EncodeAsync(input, demuxer, args, path, info, progress, ct).ConfigureAwait(false);
             var written = new FileInfo(path).Length;
             if (written <= limit)
             {

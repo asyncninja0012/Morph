@@ -24,6 +24,10 @@ public sealed class ShrinkTests : IDisposable
     [InlineData(2160, 3840, """{"long":1280,"short":720}""", 720, 1280)]
     [InlineData(5000, 1000, """{"long":2048}""", 2048, 410)]
     [InlineData(1000, 800, """{"long":2048}""", null, null)] // never upscales
+    [InlineData(1000, 800, """{"width":2000}""", 2000, 1600)] // an exact size may enlarge
+    [InlineData(1000, 800, """{"width":500,"height":500}""", 500, 400)] // fits inside
+    [InlineData(1000, 800, """{"width":500,"height":500,"stretch":true}""", 500, 500)]
+    [InlineData(1000, 800, """{"height":800}""", null, null)] // nothing to change
     public void Resize_presets_keep_the_aspect_ratio_and_never_upscale(int width, int height, string parameters, int? toWidth, int? toHeight)
     {
         var size = Presets.Resize(width, height, JsonNode.Parse(parameters)!.AsObject());
@@ -48,7 +52,45 @@ public sealed class ShrinkTests : IDisposable
         Assert.Equal("big-resized.png", Path.GetFileName(output));
         using var image = new MagickImage(output);
         Assert.Equal((2048u, 1365u), (image.Width, image.Height));
-        Assert.Equal("small.png is already that small.", ex.UserMessage);
+        Assert.Equal("small.png is already that size.", ex.UserMessage);
+    }
+
+    [Fact]
+    public void Compress_window_picture_size_overrides_the_preset()
+    {
+        Assert.Null(Presets.CompressSize(4000, 3000, new JsonObject { ["size"] = "keep" }, 1600));
+        Assert.Equal((1440, 1080), Presets.CompressSize(4000, 3000, new JsonObject { ["long"] = 1920, ["short"] = 1080 }, 1600));
+        Assert.Equal((1600, 1200), Presets.CompressSize(4000, 3000, new JsonObject { ["preset"] = "small" }, 1600));
+    }
+
+    [Fact]
+    public async Task Image_fits_under_the_size_limit()
+    {
+        var photo = Path.Combine(_dir, "photo.jpg");
+        using (var image = new MagickImage("plasma:", 1600, 1200))
+        {
+            image.Quality = 95;
+            await image.WriteAsync(photo, MagickFormat.Jpeg, TestContext.Current.CancellationToken);
+        }
+
+        var limit = new FileInfo(photo).Length / 10;
+        var output = Assert.Single(await ConvertAsync(new ImagingEngine(), "compress", "imaging", [photo], new JsonObject { ["targetMb"] = limit / 1e6 }));
+
+        Assert.Equal("photo-compressed.jpg", Path.GetFileName(output));
+        Assert.InRange(new FileInfo(output).Length, 1, limit);
+    }
+
+    [Fact]
+    public async Task Audio_fits_under_the_size_limit()
+    {
+        Assert.SkipUnless(Ffmpeg.Bundled.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var input = Path.Combine(_dir, "tone.wav");
+        File.Copy(Path.Combine(Fixtures, "sample.wav"), input); // 88 KB, 1 s
+
+        var output = Assert.Single(await ConvertAsync(new MediaEngine(), "compress", "media", [input], new JsonObject { ["targetMb"] = 0.01 }));
+
+        Assert.Equal("tone-compressed.m4a", Path.GetFileName(output));
+        Assert.InRange(new FileInfo(output).Length, 1, 10_000);
     }
 
     [Fact]

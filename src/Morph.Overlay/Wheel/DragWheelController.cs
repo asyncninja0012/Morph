@@ -257,7 +257,11 @@ public sealed class DragWheelController : IDisposable
 
     private void OnWheelDragLeave(object sender, DragEventArgs e)
     {
-        _wheel.ClearHover();
+        if (!_wheel.IsOver(e))
+        {
+            _wheel.ClearHover();
+        }
+
         OnOleLeave();
     }
 

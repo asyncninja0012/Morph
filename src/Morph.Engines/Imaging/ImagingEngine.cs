@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 using ImageMagick;
 
 using Morph.Core.Formats;
@@ -95,6 +97,7 @@ public sealed class ImagingEngine : IEngine
     private static async Task ShrinkAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
         var compress = job.ToolId == "compress";
+        var limit = compress ? Presets.TargetBytes(job.Parameters) : null;
         string? skipped = null;
         var made = 0;
         for (var i = 0; i < job.Inputs.Count; i++)
@@ -102,33 +105,53 @@ public sealed class ImagingEngine : IEngine
             ct.ThrowIfCancellationRequested();
             var input = job.Inputs[i];
             var name = Path.GetFileName(input);
-            var format = Targets[(await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id];
-            using var image = await ReadAsync(input, ct).ConfigureAwait(false);
-            var size = compress ? Compress(image, format, Presets.Compress(job.Parameters)) : Presets.Resize((int)image.Width, (int)image.Height, job.Parameters);
-            if (!compress && size is null)
+            var original = new FileInfo(input).Length;
+            if (limit is { } under && original <= under)
             {
-                skipped = $"{name} is already that small.";
+                skipped = $"{name} is already under {Presets.Megabytes(under)} MB.";
                 continue;
             }
 
-            if (size is var (width, height))
+            var format = Targets[(await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id];
+            using var image = await ReadAsync(input, ct).ConfigureAwait(false);
+            byte[]? bytes;
+            if (!compress)
             {
+                if (Presets.Resize((int)image.Width, (int)image.Height, job.Parameters) is not var (width, height))
+                {
+                    skipped = $"{name} is already that size.";
+                    continue;
+                }
+
                 image.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
+                bytes = image.ToByteArray(format);
             }
-
-            var pending = namer.Reserve(input, Path.GetExtension(input), compress ? "-compressed" : "-resized");
-            await using (var output = new FileStream(pending.Path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            else if (limit is { } target)
             {
-                await image.WriteAsync(output, format, ct).ConfigureAwait(false);
-            }
-
-            if (compress && new FileInfo(pending.Path).Length >= new FileInfo(input).Length)
-            {
-                namer.Discard(pending);
-                skipped = $"{name} is already as small as Morph can make it at this setting.";
+                bytes = FitUnder(image, format, job.Parameters, target, ct);
+                skipped = bytes is null ? $"Morph couldn't get {name} under {Presets.Megabytes(target)} MB." : skipped;
             }
             else
             {
+                // Small and Balanced also cap the long edge: a 12 MP phone photo is mostly pixels no email reader sees.
+                var (edge, level) = Presets.Compress(job.Parameters) switch
+                {
+                    Preset.Small => (1600, format == MagickFormat.Png ? 128u : 65u),
+                    Preset.Balanced => (2560, format == MagickFormat.Png ? 256u : 78u),
+                    _ => (int.MaxValue, format == MagickFormat.Png ? 0u : 88u),
+                };
+                bytes = Encode(image, format, level, Presets.CompressSize((int)image.Width, (int)image.Height, job.Parameters, edge));
+                if (bytes.Length >= original)
+                {
+                    bytes = null;
+                    skipped = $"{name} is already as small as Morph can make it at this setting.";
+                }
+            }
+
+            if (bytes is not null)
+            {
+                var pending = namer.Reserve(input, Path.GetExtension(input), compress ? "-compressed" : "-resized");
+                await File.WriteAllBytesAsync(pending.Path, bytes, ct).ConfigureAwait(false);
                 made++;
             }
 
@@ -141,32 +164,58 @@ public sealed class ImagingEngine : IEngine
         }
     }
 
-    // Small and Balanced also cap the long edge: a 12 MP phone photo is mostly pixels no email reader sees.
-    // PNG has no quality knob; Small and Balanced reduce it to 128/256 colours (what TinyPNG-style tools do), High stays lossless.
-    private static (int Width, int Height)? Compress(MagickImage image, MagickFormat format, Preset preset)
+    // Steps quality down at full size (or the size the Compress window chose), then shrinks the picture at the lowest quality.
+    private static byte[]? FitUnder(MagickImage image, MagickFormat format, JsonObject? parameters, long limit, CancellationToken ct)
     {
-        var (edge, quality, colours) = preset switch
+        uint[] levels = format == MagickFormat.Png ? [256, 128, 64, 32] : [85, 75, 65, 55, 45, 35];
+        var (width, height) = Presets.CompressSize((int)image.Width, (int)image.Height, parameters, int.MaxValue) ?? ((int)image.Width, (int)image.Height);
+        foreach (var level in levels)
         {
-            Preset.Small => (1600, 65u, 128u),
-            Preset.Balanced => (2560, 78u, 256u),
-            _ => (int.MaxValue, 88u, 0u),
-        };
+            ct.ThrowIfCancellationRequested();
+            if (Encode(image, format, level, (width, height)) is { } bytes && bytes.Length <= limit)
+            {
+                return bytes;
+            }
+        }
+
+        for (var scale = 0.75; Math.Max(width, height) * scale >= 160; scale *= 0.75)
+        {
+            ct.ThrowIfCancellationRequested();
+            var size = (Math.Max(1, (int)(width * scale)), Math.Max(1, (int)(height * scale)));
+            if (Encode(image, format, levels[^1], size) is { } bytes && bytes.Length <= limit)
+            {
+                return bytes;
+            }
+        }
+
+        return null;
+    }
+
+    /// <param name="level">JPEG-style quality, or for PNG the colour count (0 = lossless; TinyPNG-style tools quantize to 256).</param>
+    private static byte[] Encode(MagickImage image, MagickFormat format, uint level, (int Width, int Height)? size)
+    {
+        using var copy = (MagickImage)image.Clone();
+        if (size is var (width, height))
+        {
+            copy.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
+        }
+
         if (format == MagickFormat.Png)
         {
-            if (colours > 0)
+            if (level > 0)
             {
-                image.Quantize(new QuantizeSettings { Colors = colours, DitherMethod = DitherMethod.FloydSteinberg });
+                copy.Quantize(new QuantizeSettings { Colors = level, DitherMethod = DitherMethod.FloydSteinberg });
             }
 
-            image.Quality = 95; // zlib level 9, adaptive filtering
+            copy.Quality = 95; // zlib level 9, adaptive filtering
         }
         else
         {
             // AVIF's scale sits lower: Magick writes it at 50 unless told otherwise, about what JPEG looks like at 78.
-            image.Quality = format == MagickFormat.Avif ? quality - 35 : quality;
+            copy.Quality = format == MagickFormat.Avif ? Math.Max(1, level - 35) : level;
         }
 
-        return Presets.Fit((int)image.Width, (int)image.Height, edge);
+        return copy.ToByteArray(format);
     }
 
     /// <summary>Reads the first frame of an image, upright. Also used to put images into PDFs.</summary>

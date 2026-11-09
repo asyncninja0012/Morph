@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 
 using Morph.App.Merge;
 using Morph.App.Toasts;
+using Morph.App.Tools;
 using Morph.App.Tray;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
@@ -169,11 +170,35 @@ public sealed partial class App : Application
             return;
         }
 
+        // The Compress and Resize wedges ask for settings first; Compress's ring presets run at once.
+        if (item.Id is "compress" or "resize")
+        {
+            Window settings;
+            if (item.Id == "compress")
+            {
+                var compress = new CompressWindow(files.Paths);
+                compress.RunClicked += parameters => Enqueue(item, files, parameters);
+                settings = compress;
+            }
+            else
+            {
+                var resize = new ResizeWindow(files.Paths);
+                resize.RunClicked += parameters => Enqueue(item, files, parameters);
+                settings = resize;
+            }
+
+            settings.Show();
+            settings.Activate();
+            return;
+        }
+
         Enqueue(item, files);
     }
 
-    private void Enqueue(WheelItem item, DroppedFiles files)
+    /// <param name="parameters">From a settings window; null = the tool's (or ring preset's) defaults.</param>
+    private void Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null)
     {
+        _log.LogInformation("{Tool} parameters: {Parameters}", item.Id, parameters?.ToJsonString() ?? "defaults");
         // Files already in the target format are skipped. Output goes next to each original; virtual files
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
         // Merge makes one file, so it's one job, saved next to the first file.
@@ -185,7 +210,7 @@ public sealed partial class App : Application
             .Where(f => f.Row is not null)
             .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!))
             .Select(g => new JobRequest(Guid.NewGuid(), tool.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
-                tool.ParametersFor(choice)))
+                parameters?.DeepClone().AsObject() ?? tool.ParametersFor(choice)))
             .Select(r => (r, Jobs.Enqueue(r)))
             .ToList();
 

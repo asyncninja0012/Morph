@@ -19,22 +19,25 @@ internal static class MorphTheme
         var pressed = Blend(accent, dark ? Colors.Black : Colors.White, 0.2);
 
         Set(root, "AccentTextFillColorPrimaryBrush", accent);
-        foreach (var key in new[] { "AccentFillColorDefaultBrush", "AccentButtonBackground", "AccentButtonBorderBrush" })
+        foreach (var key in new[] { "AccentFillColorDefaultBrush", "AccentButtonBackground", "AccentButtonBorderBrush", "ToggleButtonBackgroundChecked",
+            "CheckBoxCheckBackgroundFillChecked", "CheckBoxCheckBackgroundStrokeChecked", "TextControlFocusedBorderBrush" })
         {
             Set(root, key, accent);
         }
 
-        foreach (var key in new[] { "AccentFillColorSecondaryBrush", "AccentButtonBackgroundPointerOver", "AccentButtonBorderBrushPointerOver" })
+        foreach (var key in new[] { "AccentFillColorSecondaryBrush", "AccentButtonBackgroundPointerOver", "AccentButtonBorderBrushPointerOver", "ToggleButtonBackgroundCheckedPointerOver",
+            "CheckBoxCheckBackgroundFillCheckedPointerOver", "CheckBoxCheckBackgroundStrokeCheckedPointerOver" })
         {
             Set(root, key, hover);
         }
 
-        foreach (var key in new[] { "AccentFillColorTertiaryBrush", "AccentButtonBackgroundPressed", "AccentButtonBorderBrushPressed" })
+        foreach (var key in new[] { "AccentFillColorTertiaryBrush", "AccentButtonBackgroundPressed", "AccentButtonBorderBrushPressed", "ToggleButtonBackgroundCheckedPressed", "ToggleButtonBorderBrushCheckedPressed",
+            "CheckBoxCheckBackgroundFillCheckedPressed", "CheckBoxCheckBackgroundStrokeCheckedPressed" })
         {
             Set(root, key, pressed);
         }
 
-        foreach (var key in new[] { "TextOnAccentFillColorPrimaryBrush", "AccentButtonForeground", "AccentButtonForegroundPointerOver", "AccentButtonForegroundPressed" })
+        foreach (var key in new[] { "TextOnAccentFillColorPrimaryBrush", "AccentButtonForeground", "AccentButtonForegroundPointerOver", "AccentButtonForegroundPressed", "ToggleButtonForegroundChecked", "ToggleButtonForegroundCheckedPressed" })
         {
             Set(root, key, onAccent);
         }

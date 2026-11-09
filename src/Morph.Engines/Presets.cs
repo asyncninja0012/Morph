@@ -7,7 +7,8 @@ internal enum Preset { Small, Balanced, High }
 
 /// <summary>
 /// Compress and Resize parameters (IT-1, IT-2), shared by the imaging, media and PDF engines. capabilities.json sets them:
-/// compress { "preset": "small" | "balanced" | "high" } or { "targetMb": 10 }; resize { "scale": 0.5 } or { "long": 1920, "short": 1080 }.
+/// compress { "preset": "small" | "balanced" | "high", "targetMb"?: 10, "size"?: "keep", "long"?: 1920, "short"?: 1080 };
+/// resize { "scale": 0.5 }, { "long": 1920, "short": 1080 } or, from the Resize window, { "width"?: 800, "height"?: 600, "stretch"?: true }.
 /// </summary>
 internal static class Presets
 {
@@ -24,14 +25,34 @@ internal static class Presets
 
     public static string Megabytes(long bytes) => (bytes / 1_000_000.0).ToString("0.##", CultureInfo.CurrentCulture);
 
-    /// <summary>The size a Resize choice asks for, keeping the aspect ratio. Null when the picture is already that small: never upscales.</summary>
+    /// <summary>
+    /// The size Resize asks for, or null when nothing would change. Presets keep the aspect ratio and never upscale; an exact
+    /// size from the Resize window may enlarge, and with "stretch" sets both sides as given.
+    /// </summary>
     public static (int Width, int Height)? Resize(int width, int height, JsonObject? parameters)
     {
+        var (w, h) = (Number(parameters?["width"]), Number(parameters?["height"]));
+        if (w is not null || h is not null)
+        {
+            (int, int) size = parameters?["stretch"]?.GetValue<bool>() == true && w is { } sw && h is { } sh
+                ? ((int)sw, (int)sh)
+                : Round(width, height, Math.Min(w / Math.Max(1, width) ?? double.MaxValue, h / Math.Max(1, height) ?? double.MaxValue));
+            return size == (width, height) ? null : size;
+        }
+
         var factor = Number(parameters?["scale"]) is { } scale
             ? scale
             : Factor(width, height, Number(parameters?["long"]) ?? int.MaxValue, Number(parameters?["short"]) ?? int.MaxValue);
         return Scaled(width, height, factor);
     }
+
+    /// <summary>
+    /// The frame Compress shrinks to: the Compress window's choice ("keep", or a long/short edge), else the preset's cap.
+    /// </summary>
+    public static (int Width, int Height)? CompressSize(int width, int height, JsonObject? parameters, int presetLong, int presetShort = int.MaxValue) =>
+        (string?)parameters?["size"] == "keep" ? null
+        : Number(parameters?["long"]) is { } l ? Fit(width, height, (int)l, (int)(Number(parameters?["short"]) ?? int.MaxValue))
+        : Fit(width, height, presetLong, presetShort);
 
     /// <summary>Shrinks to fit a long and a short edge (1080p = 1920 × 1080 either way round); null if it already fits.</summary>
     public static (int Width, int Height)? Fit(int width, int height, int longEdge, int shortEdge = int.MaxValue) =>
@@ -45,7 +66,8 @@ internal static class Presets
         Math.Min(longEdge / Math.Max(1, Math.Max(width, height)), shortEdge / Math.Max(1, Math.Min(width, height)));
 
     private static (int, int)? Scaled(int width, int height, double factor) =>
-        factor >= 1 || width <= 0 || height <= 0
-            ? null
-            : (Math.Max(1, (int)Math.Round(width * factor)), Math.Max(1, (int)Math.Round(height * factor)));
+        factor >= 1 || width <= 0 || height <= 0 ? null : Round(width, height, factor);
+
+    private static (int, int) Round(int width, int height, double factor) =>
+        (Math.Max(1, (int)Math.Round(width * factor)), Math.Max(1, (int)Math.Round(height * factor)));
 }

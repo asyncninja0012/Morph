@@ -148,6 +148,12 @@ internal sealed class WheelWindow : Window
         return wedge is { } i ? _items[i] : null;
     }
 
+    /// <summary>
+    /// Whether the pointer is over anything drawn. WPF raises DragLeave each time the pointer crosses from one shape to
+    /// the next (wedge → ring band → preset), not only when it leaves the window; those must not close the ring.
+    /// </summary>
+    public bool IsOver(DragEventArgs e) => VisualTreeHelper.HitTest(_canvas, e.GetPosition(_canvas)) is not null;
+
     public void ClearHover()
     {
         SetChoice(null);
