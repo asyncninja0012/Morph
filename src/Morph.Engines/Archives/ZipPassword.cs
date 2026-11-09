@@ -6,9 +6,10 @@ using Morph.Core.Jobs;
 namespace Morph.Engines.Archives;
 
 /// <summary>
-/// Protect and unlock ZIPs (IT-5) with SharpZipLib (D5). Protect rewrites every file AES-256 encrypted (WinZip AE-2, as
-/// 7-Zip and WinRAR write it); unlock reads AES or old ZipCrypto files and writes them unencrypted. Entries are streamed
-/// through with the same name checks and expansion limits as conversion. Outputs: photos-protected.zip, photos-unlocked.zip.
+/// Protect and unlock ZIPs (IT-5) with SharpZipLib (D5). Protect rewrites every file encrypted: ZipCrypto by default, the only
+/// kind File Explorer can extract (weak), or AES-256 with { "strong": true } (WinZip AE-2, needs 7-Zip or WinRAR). Unlock
+/// reads either and writes the files unencrypted. Entries are streamed through with the same name checks and expansion
+/// limits as conversion. Outputs: photos-protected.zip, photos-unlocked.zip.
 /// </summary>
 public sealed partial class ArchiveEngine
 {
@@ -42,7 +43,8 @@ public sealed partial class ArchiveEngine
             var output = namer.Reserve(input, ".zip", protect ? "-protected" : "-unlocked").Path;
             await using (var destination = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.Read | FileShare.Delete))
             {
-                await CopyAsync(source, destination, protect ? password : null, name, ct).ConfigureAwait(false);
+                var strong = (bool?)job.Parameters?["strong"] == true;
+                await CopyAsync(source, destination, protect ? password : null, strong, name, ct).ConfigureAwait(false);
             }
 
             made++;
@@ -67,7 +69,7 @@ public sealed partial class ArchiveEngine
         }
     }
 
-    private static async Task CopyAsync(ZipFile source, Stream destination, string? password, string name, CancellationToken ct)
+    private static async Task CopyAsync(ZipFile source, Stream destination, string? password, bool strong, string name, CancellationToken ct)
     {
         var budget = new Budget(name);
         await using var zip = new ZipOutputStream(destination) { Password = password, IsStreamOwner = false };
@@ -99,7 +101,7 @@ public sealed partial class ArchiveEngine
 
             await using (data.ConfigureAwait(false))
             {
-                await zip.PutNextEntryAsync(new ZipEntry(safe) { DateTime = entry.DateTime, AESKeySize = password is null ? 0 : 256 }, ct).ConfigureAwait(false);
+                await zip.PutNextEntryAsync(new ZipEntry(safe) { DateTime = entry.DateTime, AESKeySize = password is not null && strong ? 256 : 0 }, ct).ConfigureAwait(false);
                 await budget.CopyAsync(data, zip, ct).ConfigureAwait(false);
                 zip.CloseEntry();
             }

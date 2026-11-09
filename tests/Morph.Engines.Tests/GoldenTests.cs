@@ -375,6 +375,22 @@ public sealed class GoldenTests : IDisposable
         Assert.Equal(Path.Combine(_dir, $"sample-protected-unlocked.{from}"), unlocked);
         Assert.False(IsLocked(unlocked));
         Assert.Equal(Contents(input), Contents(unlocked));
+
+        // A ZIP is ZipCrypto by default (File Explorer can extract it), AES-256 when asked for.
+        if (from == "zip")
+        {
+            Assert.Equal(0, AesKeySize(locked));
+            var strong = Assert.Single((await RunAsync("protect", engine, [input], ct, new() { ["password"] = Password, ["strong"] = true })).Outputs);
+            Assert.Equal(256, AesKeySize(strong));
+            var back = Assert.Single((await RunAsync("unlock", engine, [strong], ct, new() { ["password"] = Password })).Outputs);
+            Assert.Equal(Contents(input), Contents(back));
+        }
+    }
+
+    private static int AesKeySize(string zip)
+    {
+        using var file = new ICSharpCode.SharpZipLib.Zip.ZipFile(zip);
+        return file.Cast<ICSharpCode.SharpZipLib.Zip.ZipEntry>().Where(e => e.IsFile).Select(e => e.AESKeySize).Distinct().Single();
     }
 
     // Other apps' files: a PDF whose password only opens it (the owner password differs), and a ZIP with old ZipCrypto.

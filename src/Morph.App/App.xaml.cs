@@ -173,7 +173,7 @@ public sealed partial class App : Application
         if (item.Id is "protect" or "unlock")
         {
             var password = new PasswordWindow(files.Paths, unlock: item.Id == "unlock");
-            password.RunClicked += p => Enqueue(item, files, new() { ["password"] = p });
+            password.RunClicked += (p, strong) => Enqueue(item, files, new() { ["password"] = p, ["strong"] = strong });
             password.Show();
             password.Activate();
             return;

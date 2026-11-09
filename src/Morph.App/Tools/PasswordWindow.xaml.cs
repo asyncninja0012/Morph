@@ -8,7 +8,8 @@ namespace Morph.App.Tools;
 
 /// <summary>
 /// The password popover (IT-5), opened by a drop on the Protect or Unlock wedge: one password box, nothing else.
-/// Raises <see cref="RunClicked"/> with the password; nothing runs if the window is closed.
+/// Protecting a ZIP also picks the lock: File Explorer's ZipCrypto or AES-256. Raises <see cref="RunClicked"/> with the
+/// password and whether AES-256 was picked; nothing runs if the window is closed.
 /// </summary>
 public sealed partial class PasswordWindow : Window
 {
@@ -25,8 +26,10 @@ public sealed partial class PasswordWindow : Window
         FilesText.ToolTip = string.Join(Environment.NewLine, files);
         HintText.Text = unlock
             ? "Saves a copy without the password. The original keeps it."
-            : "Saves a copy that asks for this password to open (AES-256). Morph can't recover a forgotten password; the original stays unlocked.";
+            : "Saves a copy that asks for this password to open. Morph can't recover a forgotten password; the original stays unlocked.";
 
+        ZipPanel.Visibility = !unlock && files.Any(f => Path.GetExtension(f).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            ? Visibility.Visible : Visibility.Collapsed;
         Hidden.PasswordChanged += (_, _) => Changed(Hidden.Password);
         Shown.TextChanged += (_, _) => Changed(Shown.Text);
         ShowBox.Click += (_, _) =>
@@ -46,13 +49,13 @@ public sealed partial class PasswordWindow : Window
         };
         RunButton.Click += (_, _) =>
         {
-            RunClicked?.Invoke(Hidden.Password);
+            RunClicked?.Invoke(Hidden.Password, StrongLock.IsChecked == true);
             Close();
         };
         Loaded += (_, _) => Hidden.Focus();
     }
 
-    public event Action<string>? RunClicked;
+    public event Action<string, bool>? RunClicked;
 
     // The two boxes mirror each other; the PasswordBox holds the value.
     private void Changed(string password)
