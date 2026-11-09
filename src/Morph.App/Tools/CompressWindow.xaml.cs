@@ -45,6 +45,7 @@ public sealed partial class CompressWindow : Window
         PresetHint.Text = Hints["balanced"];
         TargetCheck.Click += (_, _) => Validate();
         TargetBox.TextChanged += (_, _) => Validate();
+        TargetUnit.SelectionChanged += (_, _) => Validate();
         RunButton.Click += (_, _) =>
         {
             RunClicked?.Invoke(Parameters());
@@ -78,8 +79,13 @@ public sealed partial class CompressWindow : Window
         return parameters;
     }
 
-    private double? TargetMb() =>
-        double.TryParse(TargetBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var mb) && mb is > 0 and <= 100_000 ? mb : null;
+    // The engines take decimal megabytes; 1 KB is the least that makes sense, 100 GB the most.
+    private double? TargetMb()
+    {
+        var perUnit = double.Parse((string)((ComboBoxItem)TargetUnit.SelectedItem).Tag, CultureInfo.InvariantCulture);
+        return double.TryParse(TargetBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var size) && size * perUnit is var mb and >= 0.001 and <= 100_000
+            ? mb : null;
+    }
 
     private void Validate() => RunButton.IsEnabled = TargetCheck.IsChecked != true || TargetMb() is not null;
 

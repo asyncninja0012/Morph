@@ -38,8 +38,12 @@
 
             <CheckBox x:Name="TargetCheck" Content="Compress to target file size" />
             <StackPanel x:Name="TargetRow" Orientation="Horizontal" Margin="28,6,0,0" IsEnabled="{Binding IsChecked, ElementName=TargetCheck}">
-                <TextBox x:Name="TargetBox" Text="10" Width="90" AutomationProperties.Name="Target size in megabytes" />
-                <TextBlock Text="MB" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBox x:Name="TargetBox" Text="10" Width="90" AutomationProperties.Name="Target size" />
+                <ComboBox x:Name="TargetUnit" SelectedIndex="1" MinWidth="80" Margin="8,0,0,0" AutomationProperties.Name="Unit">
+                    <ComboBoxItem Tag="0.001" Content="KB" />
+                    <ComboBoxItem Tag="1" Content="MB" />
+                    <ComboBoxItem Tag="1000" Content="GB" />
+                </ComboBox>
             </StackPanel>
             <TextBlock Text="Overrides the preset: quality goes as low as it needs to." Margin="28,6,0,0" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
