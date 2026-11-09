@@ -9,7 +9,7 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
-/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress and resize (IT-1, IT-2) keep the format.
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate and strip-metadata (IT-1..3) keep the format.
 /// </summary>
 public sealed class ImagingEngine : IEngine
 {
@@ -52,6 +52,12 @@ public sealed class ImagingEngine : IEngine
         if (job.ToolId is "compress" or "resize")
         {
             await ShrinkAsync(job, namer, progress, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (job.ToolId is "rotate" or "strip-metadata")
+        {
+            await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
             return;
         }
 
@@ -161,6 +167,48 @@ public sealed class ImagingEngine : IEngine
         if (made == 0)
         {
             throw new EngineException(skipped!);
+        }
+    }
+
+    // Rotate turns the upright picture (EXIF orientation already applied). Strip info drops EXIF (GPS, camera, dates), XMP, IPTC
+    // and comments but keeps the colour profile. shortcut: lossy formats re-encode (JPEG at the quality Magick reads from the file,
+    // WebP/AVIF at Magick's defaults); a lossless JPEG path (jpegtran-style) if users notice.
+    private static async Task EditAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var rotate = job.ToolId == "rotate";
+        var (degrees, flip) = Presets.Rotate(job.Parameters);
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var input = job.Inputs[i];
+            var format = Targets[(await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id];
+            using var image = await ReadAsync(input, ct).ConfigureAwait(false);
+            if (rotate)
+            {
+                image.Rotate(degrees);
+                if (flip == "horizontal")
+                {
+                    image.Flop();
+                }
+                else if (flip == "vertical")
+                {
+                    image.Flip();
+                }
+            }
+            else
+            {
+                foreach (var profile in new[] { "exif", "xmp", "iptc", "8bim" })
+                {
+                    image.RemoveProfile(profile);
+                }
+
+                image.RemoveAttribute("comment");
+                image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time"); // Magick's own date:create/modify text
+            }
+
+            var pending = namer.Reserve(input, Path.GetExtension(input), rotate ? "-rotated" : "-stripped");
+            await File.WriteAllBytesAsync(pending.Path, image.ToByteArray(format), ct).ConfigureAwait(false);
+            progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
         }
     }
 

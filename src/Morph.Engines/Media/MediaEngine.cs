@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
 
@@ -6,6 +9,7 @@ namespace Morph.Engines.Media;
 /// <summary>
 /// Video and audio conversion through ffmpeg (PLAN §5): video → MP4/WebM/GIF/MP3, audio ↔ audio. Compress and resize
 /// (IT-1, IT-2): MKV and WebM stay themselves, other video becomes H.264 MP4, WAV/FLAC become M4A, lossy audio keeps its format.
+/// Instant tools (IT-3): rotate, strip-metadata, extract-audio, mute, make-gif, and merge in the order given.
 /// </summary>
 public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 {
@@ -38,21 +42,28 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 
     public async Task RunAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
-        if (job.ToolId is "compress" or "resize")
-        {
-            await ShrinkAsync(job, namer, progress, ct).ConfigureAwait(false);
-            return;
-        }
-
-        var target = job.ToolId.StartsWith("convert.", StringComparison.Ordinal) ? job.ToolId["convert.".Length..] : "";
-        if (target is not ("gif" or "mkv") && !VideoOutputs.ContainsKey(target) && !AudioOutputs.ContainsKey(target))
-        {
-            throw new EngineException("This conversion isn't available yet.", $"media: unsupported tool {job.ToolId}");
-        }
-
         if (!ffmpeg.IsAvailable)
         {
             throw new EngineException("Morph's video converter is missing. Reinstall Morph.", $"not found: {ffmpeg.FfmpegPath}");
+        }
+
+        switch (job.ToolId)
+        {
+            case "compress" or "resize":
+                await ShrinkAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
+            case "rotate" or "strip-metadata" or "extract-audio" or "mute":
+                await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
+            case "merge":
+                await MergeAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
+        }
+
+        var target = job.ToolId == "make-gif" ? "gif" : job.ToolId.StartsWith("convert.", StringComparison.Ordinal) ? job.ToolId["convert.".Length..] : "";
+        if (target is not ("gif" or "mkv") && !VideoOutputs.ContainsKey(target) && !AudioOutputs.ContainsKey(target))
+        {
+            throw new EngineException("This conversion isn't available yet.", $"media: unsupported tool {job.ToolId}");
         }
 
         // Every output shows up under its final name at once and fills in as its turn comes.
@@ -124,8 +135,19 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 
     // The demuxer is forced and only the file protocol allowed, so a hostile file can't reach
     // playlist/concat demuxers that open other files or URLs.
-    private Task EncodeAsync(string input, string demuxer, string[] output, string path, MediaInfo info, IProgress<JobProgress> progress, CancellationToken ct) =>
-        ffmpeg.EncodeAsync(["-protocol_whitelist", "file", "-f", demuxer, "-i", input, "-map_metadata", "0", .. output, path], info.Duration, progress, ct);
+    private Task EncodeAsync(string input, string demuxer, string[] output, string path, MediaInfo info, IProgress<JobProgress> progress, CancellationToken ct,
+        bool keepMetadata = true) =>
+        ffmpeg.EncodeAsync(["-protocol_whitelist", "file", "-f", demuxer, "-i", input, .. keepMetadata ? ["-map_metadata", "0"] : Array.Empty<string>(), .. output, path],
+            info.Duration, progress, ct);
+
+    // The muxer that writes a file back in its own format, for the tools that copy streams.
+    private static string SameMuxer(FileFormat format) => format.Id switch
+    {
+        "mkv" => "matroska",
+        "wmv" => "asf",
+        "m4a" => "ipod",
+        _ => format.Id, // mp4, mov, webm, avi, mp3, wav, flac, ogg, opus
+    };
 
     private static string Demuxer(string input, FileFormat format) => format.Id switch
     {
@@ -140,11 +162,6 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
     // Compress (preset or "fit under X MB") and resize. A file already small enough is skipped; the job fails only when every file was.
     private async Task ShrinkAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
-        if (!ffmpeg.IsAvailable)
-        {
-            throw new EngineException("Morph's video converter is missing. Reinstall Morph.", $"not found: {ffmpeg.FfmpegPath}");
-        }
-
         var compress = job.ToolId == "compress";
         var preset = Presets.Compress(job.Parameters);
         var limit = compress ? Presets.TargetBytes(job.Parameters) : null;
@@ -234,6 +251,175 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
         }
     }
 
+    // Rotate re-encodes (MKV/WebM stay, other video → MP4) and copies the sound when the container holds it. Strip info, extract
+    // audio and mute copy streams, so they take seconds and lose nothing. A file with nothing to do is skipped; the job fails
+    // only when every file was.
+    private async Task EditAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var (degrees, flip) = Presets.Rotate(job.Parameters);
+        string[] turn = degrees switch { 90 => ["transpose=clock"], 180 => ["hflip", "vflip"], 270 => ["transpose=cclock"], _ => [] };
+        string[] mirror = flip switch { "horizontal" => ["hflip"], "vertical" => ["vflip"], _ => [] };
+        var transform = string.Join(",", [.. turn, .. mirror]);
+        string? skipped = null;
+        var made = 0;
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            var input = job.Inputs[i];
+            var name = Path.GetFileName(input);
+            var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+            var demuxer = Demuxer(input, format);
+            var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+            var done = i;
+            var fileProgress = new SyncProgress<JobProgress>(p =>
+                progress.Report(p with { Fraction = double.IsNaN(p.Fraction) ? p.Fraction : (done + p.Fraction) / job.Inputs.Count }));
+
+            if (job.ToolId is "rotate" or "mute" && info.VideoCodec is null)
+            {
+                throw new EngineException($"{name} has no picture.");
+            }
+
+            if (job.ToolId is "extract-audio" or "mute" && info.AudioCodec is null)
+            {
+                skipped = job.ToolId == "mute" ? $"{name} is already silent." : $"{name} has no sound.";
+                continue;
+            }
+
+            // 0:V leaves out cover art: strip info drops it (a picture can carry its own EXIF), mute has no use for it.
+            var (extension, suffix, keepMetadata, output) = job.ToolId switch
+            {
+                "rotate" => await RotateArgsAsync(format, info, transform, ct).ConfigureAwait(false),
+                "strip-metadata" =>
+                (
+                    format.Id, "-stripped", false,
+                    ["-map", "0:V?", "-map", "0:a?", "-map", "0:s?", "-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1",
+                        "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact", "-f", SameMuxer(format)]
+                ),
+                "mute" => (format.Id, "-muted", true, ["-map", "0:V", "-map", "0:s?", "-an", "-c", "copy", "-f", SameMuxer(format)]),
+                _ => ExtractArgs(info.AudioCodec!),
+            };
+
+            var pending = namer.Reserve(input, "." + extension, suffix);
+            await EncodeAsync(input, demuxer, output, pending.Path, info, fileProgress, ct, keepMetadata).ConfigureAwait(false);
+            made++;
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
+        }
+    }
+
+    private async Task<(string, string, bool, string[])> RotateArgsAsync(FileFormat format, MediaInfo info, string transform, CancellationToken ct)
+    {
+        var container = format.Id is "mkv" or "webm" ? format.Id : "mp4";
+        var video = await VideoArgsAsync(container, null, 23, kbps: null, ct, transform).ConfigureAwait(false);
+        string[] audio = CopyAudio(container, info.AudioCodec) ? ["-c:a", "copy"] : VideoOutputs[Muxer(container)].Audio;
+        return (container, "-rotated", true, Video(video, audio, container));
+    }
+
+    // The sound as it is when a plain audio file can hold it (video.mp4 → video.m4a in seconds), else AAC in M4A.
+    private static (string, string, bool, string[]) ExtractArgs(string codec)
+    {
+        (string Extension, string Muxer)? copy = codec switch
+        {
+            "aac" => ("m4a", "ipod"),
+            "mp3" => ("mp3", "mp3"),
+            "opus" => ("opus", "opus"),
+            "vorbis" => ("ogg", "ogg"),
+            "flac" => ("flac", "flac"),
+            "pcm_s16le" => ("wav", "wav"),
+            _ => null,
+        };
+        return copy is var (extension, muxer)
+            ? (extension, "", true, ["-map", "0:a:0", "-vn", "-c:a", "copy", "-f", muxer])
+            : ("m4a", "", true, ["-map", "0:a:0", "-vn", .. AudioOutputs["m4a"].Audio, "-f", "ipod"]);
+    }
+
+    // One file from all inputs in order (name-merged.ext after the first). Video: every clip scaled and letterboxed into the
+    // first one's frame at its frame rate, silence where a clip has no sound; MKV/WebM stay, other video → MP4. Audio: the
+    // first file's format. Each input gets its own forced demuxer and the file-only protocol, never the concat demuxer
+    // (it opens whatever paths a file lists).
+    private async Task MergeAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        if (job.Inputs.Count < 2)
+        {
+            throw new EngineException("Merge needs two or more videos, or two or more sound files.");
+        }
+
+        var inputs = new List<(string Path, string Demuxer, FileFormat Format, MediaInfo Info)>();
+        foreach (var input in job.Inputs)
+        {
+            var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+            var demuxer = Demuxer(input, format);
+            inputs.Add((input, demuxer, format, await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false)));
+        }
+
+        var video = inputs[0].Info.VideoCodec is not null;
+        if (inputs.Any(i => (i.Info.VideoCodec is not null) != video))
+        {
+            throw new EngineException("Merge can't mix videos with sound-only files.");
+        }
+
+        var duration = inputs.All(i => i.Info.Duration is not null) ? inputs.Sum(i => i.Info.Duration) : null;
+        var withSound = inputs.Any(i => i.Info.AudioCodec is not null);
+        var graph = new StringBuilder();
+        var joined = new StringBuilder();
+        const string Sound = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
+        string[] output;
+        string extension;
+        if (video)
+        {
+            extension = inputs[0].Format.Id is "mkv" or "webm" ? inputs[0].Format.Id : "mp4";
+            var (width, height) = (Math.Max(2, inputs[0].Info.Width / 2 * 2), Math.Max(2, inputs[0].Info.Height / 2 * 2));
+            var fps = inputs[0].Info.Fps ?? "30";
+            for (var i = 0; i < inputs.Count; i++)
+            {
+                graph.Append(CultureInfo.InvariantCulture,
+                    $"[{i}:V:0]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format={PixelFormat(extension)}[v{i}];");
+                joined.Append(CultureInfo.InvariantCulture, $"[v{i}]");
+                if (withSound)
+                {
+                    if (inputs[i].Info.AudioCodec is not null)
+                    {
+                        graph.Append(CultureInfo.InvariantCulture, $"[{i}:a:0]{Sound}[a{i}];");
+                    }
+                    else
+                    {
+                        graph.Append(CultureInfo.InvariantCulture, $"anullsrc=r=48000:cl=stereo,atrim=duration={inputs[i].Info.Duration ?? 0},{Sound}[a{i}];");
+                    }
+
+                    joined.Append(CultureInfo.InvariantCulture, $"[a{i}]");
+                }
+            }
+
+            graph.Append(CultureInfo.InvariantCulture, $"{joined}concat=n={inputs.Count}:v=1:a={(withSound ? 1 : 0)}[v]{(withSound ? "[a]" : "")}");
+            output =
+            [
+                "-map", "[v]", .. withSound ? ["-map", "[a]"] : Array.Empty<string>(),
+                .. await EncoderAsync(extension, 23, kbps: null, ct).ConfigureAwait(false),
+                .. withSound ? VideoOutputs[Muxer(extension)].Audio : [],
+                .. VideoOutputs[Muxer(extension)].Muxer,
+            ];
+        }
+        else
+        {
+            extension = inputs[0].Format.Id;
+            for (var i = 0; i < inputs.Count; i++)
+            {
+                graph.Append(CultureInfo.InvariantCulture, $"[{i}:a:0]{Sound}[a{i}];");
+                joined.Append(CultureInfo.InvariantCulture, $"[a{i}]");
+            }
+
+            graph.Append(CultureInfo.InvariantCulture, $"{joined}concat=n={inputs.Count}:v=0:a=1[a]");
+            output = ["-map", "[a]", .. AudioOutputs[extension].Audio, "-f", AudioOutputs[extension].Muxer];
+        }
+
+        var pending = namer.Reserve(inputs[0].Path, "." + extension, "-merged");
+        await ffmpeg.EncodeAsync(
+            [.. inputs.SelectMany(i => new[] { "-protocol_whitelist", "file", "-f", i.Demuxer, "-i", i.Path }), "-filter_complex", graph.ToString(), .. output, pending.Path],
+            duration, progress, ct).ConfigureAwait(false);
+    }
+
     // Aims the average bit rate at the size limit, then re-encodes lower if the encoder overshot (hardware rate control is loose).
     private async Task<string?> FitAsync(string input, string demuxer, MediaInfo info, string container, (int Width, int Height)? size, long limit, string path,
         IProgress<JobProgress> progress, CancellationToken ct)
@@ -305,22 +491,30 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
     }
 
     // Even dimensions: every encoder here wants 4:2:0, which needs them. kbps set = average bit rate, else constant quality.
-    private async Task<string[]> VideoArgsAsync(string container, (int Width, int Height)? size, int quality, int? kbps, CancellationToken ct)
+    // filter (rotate's transpose) runs before the scale.
+    private async Task<string[]> VideoArgsAsync(string container, (int Width, int Height)? size, int quality, int? kbps, CancellationToken ct, string? filter = null)
     {
         var scale = size is var (w, h) ? $"scale={w / 2 * 2}:{h / 2 * 2}" : "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+        return ["-vf", $"{(filter is null ? "" : filter + ",")}{scale},format={PixelFormat(container)}", .. await EncoderAsync(container, quality, kbps, ct).ConfigureAwait(false)];
+    }
+
+    private static string PixelFormat(string container) => container == "webm" ? "yuv420p" : "nv12";
+
+    private async Task<string[]> EncoderAsync(string container, int quality, int? kbps, CancellationToken ct)
+    {
         if (container == "webm")
         {
             string[] rate = kbps is { } k ? ["-b:v", $"{k}k"] : ["-crf", $"{quality + 9}", "-b:v", "0"]; // VP9's CRF runs about 9 above x264's for the same look
             return
             [
-                "-vf", $"{scale},format=yuv420p", "-c:v", "libvpx-vp9", .. rate, "-deadline", "realtime", "-cpu-used", "6", "-row-mt", "1",
+                "-c:v", "libvpx-vp9", .. rate, "-deadline", "realtime", "-cpu-used", "6", "-row-mt", "1",
                 "-tile-columns", "2", "-threads", $"{Environment.ProcessorCount}",
             ];
         }
 
         var h264 = await probe.H264Async(ct).ConfigureAwait(false)
             ?? throw new EngineException("This PC has no H.264 video encoder. On Windows N, install the Media Feature Pack.");
-        return ["-vf", $"{scale},format=nv12", .. kbps is { } bitrate ? h264.Bitrate(bitrate) : h264.Quality(quality)];
+        return kbps is { } bitrate ? h264.Bitrate(bitrate) : h264.Quality(quality);
     }
 
     private static string[] Video(string[] video, string[] audio, string container) =>

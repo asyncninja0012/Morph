@@ -55,13 +55,28 @@ public sealed class CapabilityMatrixTests
             "convert.gz"], Ids([]));
 
     [Fact]
-    public void Merge_needs_two_files_it_can_put_in_a_pdf()
+    public void Merge_needs_two_files_it_can_join()
     {
-        Assert.Equal(["compress"], Ids([FileFormat.Pdf], WheelGroup.Tools));
-        Assert.Equal(["compress", "merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
-        Assert.Equal(["merge"], Ids([FileFormat.Heic, FileFormat.Pdf, FileFormat.Png], WheelGroup.Tools));
-        Assert.Equal(["compress"], Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
-        Assert.Equal(["compress", "resize", "merge"], Ids([], WheelGroup.Tools));
+        Assert.Equal(["compress", "strip-metadata", "ocr"], Ids([FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["compress", "strip-metadata", "ocr", "merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["ocr", "merge"], Ids([FileFormat.Heic, FileFormat.Pdf, FileFormat.Png], WheelGroup.Tools));
+        Assert.Equal(["compress", "strip-metadata"], Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
+        Assert.Contains("merge", Ids([FileFormat.Mp4, FileFormat.Mov], WheelGroup.Tools));
+        Assert.Contains("merge", Ids([FileFormat.Mp3, FileFormat.Wav], WheelGroup.Tools));
+        Assert.Equal(["compress", "resize", "rotate", "strip-metadata", "ocr", "extract-audio", "mute", "make-gif", "merge"], Ids([], WheelGroup.Tools));
+    }
+
+    [Fact]
+    public void Video_gets_the_sound_and_picture_tools() =>
+        Assert.Equal(["compress", "resize", "rotate", "strip-metadata", "extract-audio", "mute", "make-gif"], Ids([FileFormat.Mp4], WheelGroup.Tools));
+
+    [Fact]
+    public void A_flip_preset_turns_nothing()
+    {
+        var rotate = Shipped.Tool("rotate")!;
+
+        Assert.Equal("""{"turn":90}""", rotate.ParametersFor(null)!.ToJsonString());
+        Assert.Equal("""{"turn":0,"flip":"horizontal"}""", rotate.ParametersFor("mirror")!.ToJsonString());
     }
 
     [Fact]

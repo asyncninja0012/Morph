@@ -37,6 +37,12 @@ public sealed class PdfEngine : IEngine
             return;
         }
 
+        if (job.ToolId == "strip-metadata")
+        {
+            Strip(job, namer, progress, ct);
+            return;
+        }
+
         var target = job.ToolId switch
         {
             "convert.jpg" => MagickFormat.Jpeg,
@@ -89,6 +95,21 @@ public sealed class PdfEngine : IEngine
         }
     }
 
+    // Strip info (IT-3): the document info (author, title, dates, creator app) and the XMP packet go; pages are copied as they are.
+    // PDFsharp then writes only its own name as Producer.
+    private static void Strip(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            using var document = PdfCompressor.Open(job.Inputs[i]);
+            document.Info.Elements.Clear();
+            document.Internals.Catalog.Elements.Remove("/Metadata");
+            document.Save(namer.Reserve(job.Inputs[i], ".pdf", "-stripped").Path);
+            progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+    }
+
     // convert.pdf: one PDF per image. merge: one PDF of every input, named after the first (report-merged.pdf).
     private static async Task BuildAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
@@ -121,7 +142,8 @@ public sealed class PdfEngine : IEngine
         }
     }
 
-    private static void Convert(string input, MagickFormat target, int? quality, OutputNamer namer, Action<double> progress, CancellationToken ct)
+    /// <summary>Opens a PDF with PDFium and counts its pages; the caller holds <see cref="Pdfium.Sync"/> and closes it.</summary>
+    internal static (nint Doc, int Pages) Open(string input)
     {
         var name = Path.GetFileName(input);
         var doc = Pdfium.FPDF_LoadDocument(input, null);
@@ -133,19 +155,43 @@ public sealed class PdfEngine : IEngine
                 : new EngineException($"{name} is damaged or isn't a PDF Morph can read.", $"PDFium error {error}");
         }
 
+        var pages = Pdfium.FPDF_GetPageCount(doc);
+        if (pages is > 0 and <= MaxPages)
+        {
+            return (doc, pages);
+        }
+
+        Pdfium.FPDF_CloseDocument(doc);
+        throw pages <= 0
+            ? new EngineException($"{name} is damaged or has no pages.", $"page count {pages}")
+            : new EngineException($"{name} has {pages:N0} pages; Morph handles up to {MaxPages:N0}.");
+    }
+
+    /// <summary>One page as a white-backed image at <paramref name="dpi"/>; the caller holds <see cref="Pdfium.Sync"/>.</summary>
+    internal static MagickImage RenderPage(nint doc, int index, string name, double dpi)
+    {
+        var page = Pdfium.FPDF_LoadPage(doc, index);
+        if (page == 0)
+        {
+            throw new EngineException($"Page {index + 1} of {name} is damaged.", $"PDFium error {Pdfium.FPDF_GetLastError()}");
+        }
+
         try
         {
-            var pages = Pdfium.FPDF_GetPageCount(doc);
-            if (pages <= 0)
-            {
-                throw new EngineException($"{name} is damaged or has no pages.", $"page count {pages}");
-            }
+            return RenderImage(page, dpi);
+        }
+        finally
+        {
+            Pdfium.FPDF_ClosePage(page);
+        }
+    }
 
-            if (pages > MaxPages)
-            {
-                throw new EngineException($"{name} has {pages:N0} pages; Morph handles up to {MaxPages:N0}.");
-            }
-
+    private static void Convert(string input, MagickFormat target, int? quality, OutputNamer namer, Action<double> progress, CancellationToken ct)
+    {
+        var name = Path.GetFileName(input);
+        var (doc, pages) = Open(input);
+        try
+        {
             var text = target == MagickFormat.Txt ? new StringBuilder() : null;
             var digits = pages.ToString(CultureInfo.InvariantCulture).Length;
             for (var p = 0; p < pages; p++)
@@ -194,10 +240,21 @@ public sealed class PdfEngine : IEngine
         }
     }
 
-    private static unsafe void Render(nint page, MagickFormat format, int? quality, string path)
+    private static void Render(nint page, MagickFormat format, int? quality, string path)
+    {
+        using var image = RenderImage(page, Dpi);
+        if (quality is { } q && format == MagickFormat.Jpeg)
+        {
+            image.Quality = (uint)Math.Clamp(q, 1, 100);
+        }
+
+        image.Write(path, format);
+    }
+
+    private static unsafe MagickImage RenderImage(nint page, double dpi)
     {
         var (widthPt, heightPt) = (Pdfium.FPDF_GetPageWidthF(page), Pdfium.FPDF_GetPageHeightF(page));
-        var scale = Math.Min(Dpi / 72, MaxEdge / Math.Max(1, Math.Max(widthPt, heightPt)));
+        var scale = Math.Min(dpi / 72, MaxEdge / Math.Max(1, Math.Max(widthPt, heightPt)));
         var width = Math.Max(1, (int)Math.Round(widthPt * scale));
         var height = Math.Max(1, (int)Math.Round(heightPt * scale));
 
@@ -216,17 +273,12 @@ public sealed class PdfEngine : IEngine
                 throw new InvalidOperationException("Unexpected PDFium bitmap stride.");
             }
 
-            using var image = new MagickImage();
+            var image = new MagickImage();
             image.ReadPixels(new ReadOnlySpan<byte>((void*)Pdfium.FPDFBitmap_GetBuffer(bitmap), width * height * 4),
                 new PixelReadSettings((uint)width, (uint)height, StorageType.Char, PixelMapping.BGRA));
             image.Alpha(AlphaOption.Off); // the x byte of BGRx isn't alpha
-            image.Density = new Density(Dpi);
-            if (quality is { } q && format == MagickFormat.Jpeg)
-            {
-                image.Quality = (uint)Math.Clamp(q, 1, 100);
-            }
-
-            image.Write(path, format);
+            image.Density = new Density(dpi);
+            return image;
         }
         finally
         {

@@ -27,11 +27,10 @@ public sealed partial class App : Application
     private static volatile bool _canEncodeHeic;
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
-    // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land.
+    // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land (crop: 3.x).
     private static readonly WheelItem[] PlaceholderTools =
     [
-        new("rotate", "Rotate", ""),
-        new("crop", "Crop", ""), new("strip-metadata", "Strip info", ""), new("ocr", "Text (OCR)", ""),
+        new("crop", "Crop", ""),
     ];
 
     private static readonly WheelItem[] ActionItems =

@@ -81,7 +81,7 @@ internal static class PdfCompressor
         document.Save(output);
     }
 
-    private static PdfDocument Open(string input)
+    internal static PdfDocument Open(string input)
     {
         var name = Path.GetFileName(input);
         var locked = false;

@@ -58,6 +58,17 @@ internal static class Presets
     public static (int Width, int Height)? Fit(int width, int height, int longEdge, int shortEdge = int.MaxValue) =>
         Scaled(width, height, Factor(width, height, longEdge, shortEdge));
 
+    /// <summary>
+    /// Rotate (IT-3): { "turn": 90 | 180 | 270 | 0, "flip"?: "horizontal" | "vertical" }. Clockwise; the flip comes after the turn.
+    /// Anything else, or nothing to do, is a quarter turn right.
+    /// </summary>
+    public static (int Degrees, string? Flip) Rotate(JsonObject? parameters)
+    {
+        var turn = Number(parameters?["turn"]) is { } t ? (((int)t % 360) + 360) % 360 : 90;
+        var flip = (string?)parameters?["flip"] is "horizontal" or "vertical" ? (string?)parameters?["flip"] : null;
+        return turn is not (0 or 90 or 180 or 270) || (turn == 0 && flip is null) ? (90, null) : (turn, flip);
+    }
+
     // Any JSON number: a JsonObject built in code holds an int where parsed JSON would give a double.
     private static double? Number(JsonNode? node) =>
         node is null ? null : double.Parse(node.ToJsonString(), NumberStyles.Float, CultureInfo.InvariantCulture);

@@ -114,9 +114,11 @@ public sealed class CapabilityMatrix
             var fits = true;
             var beta = false;
             Requirement? missing = null;
+            string? engine = null;
             foreach (var file in files.Where(f => f.Id != target))
             {
-                if (!_rows.TryGetValue((file.Id, tool.Id), out var row))
+                // A multi-file tool (merge) makes one file, so one engine has to take them all: no PDF + video.
+                if (!_rows.TryGetValue((file.Id, tool.Id), out var row) || (tool.MinFiles > 1 && (engine ??= row.Engine) != row.Engine))
                 {
                     fits = false;
                     break;

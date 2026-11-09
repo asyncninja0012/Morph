@@ -15,6 +15,12 @@ using Morph.Engines.Media;
 using Morph.Engines.Sheets;
 using Morph.Engines.Subtitles;
 
+using PdfSharp.Pdf.IO;
+
+using SharpReader = PdfSharp.Pdf.IO.PdfReader;
+
+using WinOcr = Windows.Media.Ocr.OcrEngine;
+
 namespace Morph.Engines.Tests;
 
 /// <summary>
@@ -196,6 +202,167 @@ public sealed class GoldenTests : IDisposable
             Assert.InRange(outDuration, inDuration - 0.1, inDuration + 0.1);
             Assert.Equal(tool == "resize" ? "160x120" : inSize, outSize);
         }
+    }
+
+    public static TheoryData<string, string, string> InstantRows()
+    {
+        var rows = new TheoryData<string, string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool is "rotate" or "strip-metadata" or "ocr" or "extract-audio" or "mute" or "make-gif"))
+        {
+            rows.Add(r.In, r.Tool, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // IT-3 with each tool's wedge default. Rotate turns a quarter right (width and height swap); strip info removes an Artist /
+    // title / Author planted first; OCR reads sample.pdf's "Morph sample page 1", for images from a rendered page; extract audio
+    // copies the sound into a matching audio file; mute leaves no sound; make GIF is the convert path.
+    [Theory]
+    [MemberData(nameof(InstantRows))]
+    public async Task Instant_tool_row_runs(string from, string tool, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        if (engine == "media")
+        {
+            Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+            Assert.SkipWhen(tool == "rotate" && from != "webm" && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        }
+
+        Assert.SkipWhen(tool == "ocr" && WinOcr.TryCreateFromUserProfileLanguages() is null, "no Windows OCR language installed");
+        Assert.SkipWhen(tool == "ocr" && from == "heic", "Magick can't write a HEIC with text to read");
+
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        if (tool == "ocr" && from != "pdf")
+        {
+            var pdf = Path.Combine(_dir, "page.pdf");
+            File.Copy(Path.Combine(Fixtures, "sample.pdf"), pdf);
+            using var page = new MagickImage((await RenderAsync(pdf, ct))[0]);
+            await page.WriteAsync(input, ct);
+        }
+        else if (tool == "strip-metadata")
+        {
+            await PlantSecretAsync(fixture, input, from, engine, ct);
+        }
+        else
+        {
+            File.Copy(fixture, input);
+        }
+
+        var output = Assert.Single((await RunAsync(tool, engine, [input], ct)).Outputs);
+        switch (tool)
+        {
+            case "ocr":
+                Assert.Equal(Path.Combine(_dir, "sample.txt"), output);
+                Assert.Contains("sample page 1", await File.ReadAllTextAsync(output, ct), StringComparison.OrdinalIgnoreCase);
+                break;
+            case "rotate" when engine == "imaging":
+                using (var a = new MagickImage(input))
+                using (var b = new MagickImage(output))
+                {
+                    Assert.Equal((a.Height, a.Width), (b.Width, b.Height));
+                    a.Rotate(90);
+                    var distance = BitOperations.PopCount(DHash(a) ^ DHash(b));
+                    Assert.True(distance <= 6, $"dHash distance {distance}");
+                }
+
+                break;
+            case "rotate":
+                Assert.EndsWith("-rotated", Path.GetFileNameWithoutExtension(output), StringComparison.Ordinal);
+                Assert.Equal("240x320", (await ProbeAsync(output, ct)).Size);
+                break;
+            case "strip-metadata":
+                Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
+                Assert.False(await HasSecretAsync(output, engine, ct), "the planted metadata is still there");
+                break;
+            case "extract-audio":
+                Assert.Equal(FileKind.Audio, (await FileSniffer.Instance.DetectAsync(output, ct)).Kind);
+                Assert.Equal(from switch { "mov" or "avi" => ".wav", "mkv" => ".flac", "webm" => ".ogg", _ => ".m4a" }, Path.GetExtension(output));
+                Assert.InRange((await ProbeAsync(output, ct)).Duration, 0.9, 1.1);
+                break;
+            case "mute":
+                Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
+                Assert.Single((await ProbeAsync(output, ct)).Codecs);
+                break;
+            default: // make-gif
+                Assert.Equal("gif", (await FileSniffer.Instance.DetectAsync(output, ct)).Id);
+                break;
+        }
+    }
+
+    // A copy of the fixture with an author/title that strip info has to remove.
+    private async Task PlantSecretAsync(string fixture, string input, string from, string engine, CancellationToken ct)
+    {
+        if (engine == "imaging")
+        {
+            using var image = new MagickImage(fixture);
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Artist, "Secret");
+            image.SetProfile(exif);
+            image.Comment = "Secret"; // Magick writes no EXIF into a TIFF, but it does write the comment
+            await image.WriteAsync(input, ct);
+        }
+        else if (engine == "pdf")
+        {
+            using var document = SharpReader.Open(fixture, PdfDocumentOpenMode.Modify);
+            document.Info.Author = "Secret";
+            document.Save(input);
+        }
+        else
+        {
+            var (exit, _, stderr) = await Ffmpeg.RunAsync(_ffmpeg.FfmpegPath,
+                ["-v", "error", "-i", fixture, "-map", "0", "-c", "copy", "-metadata", "title=Secret", "-f", from switch { "mkv" => "matroska", "wmv" => "asf", "m4a" => "ipod", _ => from }, input],
+                null, ct);
+            Assert.True(exit == 0, stderr);
+        }
+
+        Assert.True(await HasSecretAsync(input, engine, ct), $"couldn't plant metadata in {from}");
+    }
+
+    private async Task<bool> HasSecretAsync(string path, string engine, CancellationToken ct)
+    {
+        if (engine == "imaging")
+        {
+            using var image = new MagickImage(path);
+            return image.GetExifProfile()?.GetValue(ExifTag.Artist)?.Value == "Secret" || image.Comment == "Secret";
+        }
+
+        if (engine == "pdf")
+        {
+            using var document = SharpReader.Open(path, PdfDocumentOpenMode.Import);
+            return document.Info.Author == "Secret";
+        }
+
+        var (exit, stdout, stderr) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath, ["-v", "error", "-show_entries", "format_tags:stream_tags", "-of", "json", path], null, ct);
+        Assert.True(exit == 0, stderr);
+        return stdout.Contains("Secret", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Merge_joins_videos_and_sounds_in_order()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        Assert.SkipWhen(await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        var files = new[] { "mov", "webm", "mp3", "wav" }.Select(f => Path.Combine(_dir, $"sample.{f}")).ToArray();
+        foreach (var file in files)
+        {
+            File.Copy(Path.Combine(Fixtures, Path.GetFileName(file)), file);
+        }
+
+        // Different codecs and containers; the first file sets the frame and the format.
+        var video = Assert.Single((await RunAsync("merge", "media", files[..2], ct)).Outputs);
+        Assert.Equal(Path.Combine(_dir, "sample-merged.mp4"), video);
+        var (duration, size, codecs) = await ProbeAsync(video, ct);
+        Assert.InRange(duration, 1.9, 2.1);
+        Assert.Equal("320x240", size);
+        Assert.Equal(["h264", "aac"], codecs);
+
+        var sound = Assert.Single((await RunAsync("merge", "media", files[2..], ct)).Outputs);
+        Assert.Equal(Path.Combine(_dir, "sample-merged.mp3"), sound);
+        Assert.InRange((await ProbeAsync(sound, ct)).Duration, 1.9, 2.1);
     }
 
     [Fact]

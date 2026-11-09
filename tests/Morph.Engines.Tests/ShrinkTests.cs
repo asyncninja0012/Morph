@@ -18,6 +18,16 @@ public sealed class ShrinkTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     [Theory]
+    [InlineData("""{"turn":270}""", 270, null)]
+    [InlineData("""{"turn":-90}""", 270, null)]
+    [InlineData("""{"turn":0,"flip":"vertical"}""", 0, "vertical")]
+    [InlineData("""{"turn":0}""", 90, null)] // nothing to do: a quarter turn, like the wedge
+    [InlineData("""{"turn":45,"flip":"sideways"}""", 90, null)]
+    [InlineData(null, 90, null)]
+    public void Rotate_reads_turn_and_flip(string? json, int degrees, string? flip) =>
+        Assert.Equal((degrees, flip), Presets.Rotate(json is null ? null : JsonNode.Parse(json)!.AsObject()));
+
+    [Theory]
     [InlineData(4000, 3000, """{"scale":0.5}""", 2000, 1500)]
     [InlineData(4000, 3000, """{"long":1920,"short":1080}""", 1440, 1080)] // the short edge limits a 4:3 photo
     [InlineData(1080, 1920, """{"long":1920,"short":1080}""", null, null)] // portrait 1080p is already 1080p

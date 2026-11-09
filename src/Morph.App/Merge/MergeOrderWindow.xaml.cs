@@ -15,7 +15,13 @@ public sealed record MergeRow(int Index, int Count, string Path)
 
     public string Name => System.IO.Path.GetFileName(Path);
 
-    public string Glyph => FileFormat.FromExtension(System.IO.Path.GetExtension(Path)).Kind == FileKind.Image ? "" : "";
+    public string Glyph => FileFormat.FromExtension(System.IO.Path.GetExtension(Path)).Kind switch
+    {
+        FileKind.Image => "",
+        FileKind.Video => "",
+        FileKind.Audio => "",
+        _ => "",
+    };
 
     public bool CanMoveUp => Index > 0;
 
@@ -28,7 +34,7 @@ public sealed record MergeRow(int Index, int Count, string Path)
     public override string ToString() => $"{Number}. {Name}"; // what screen readers announce for the row
 }
 
-/// <summary>Lets the user set the page order before a merge (IT-3); starts in drop order. Raises <see cref="MergeClicked"/>.</summary>
+/// <summary>Lets the user set the order before a merge (IT-3); starts in drop order. Raises <see cref="MergeClicked"/>.</summary>
 public sealed partial class MergeOrderWindow : Window
 {
     private readonly List<string> _files;
