@@ -116,22 +116,27 @@ internal sealed class WheelWindow : Window
     }
 
     /// <summary>Item under a drag position (DragOver coordinates; no mouse events arrive during OLE drags): a wedge, or a preset of the open ring.</summary>
-    public WheelItem? ItemAt(DragEventArgs e)
+    public WheelItem? ItemAt(DragEventArgs e) => ItemAt(e.GetPosition(_canvas));
+
+    /// <summary>Item under a point on the wheel (mouse coordinates, keyboard path).</summary>
+    public WheelItem? ItemAt(Point pos)
     {
-        var (wedge, choice, _) = Hit(e);
+        var (wedge, choice, _) = Hit(pos);
         return choice is { } c ? _items[_expanded!.Value].Choices![c] : wedge is { } w ? _items[w] : null;
     }
 
     /// <summary>Highlights what's under the pointer and opens or closes the preset ring; returns <see cref="ItemAt"/>.</summary>
-    public WheelItem? Hover(DragEventArgs e)
+    public WheelItem? Hover(DragEventArgs e) => Hover(e.GetPosition(_canvas));
+
+    public WheelItem? Hover(Point pos)
     {
-        var (wedge, choice, inRing) = Hit(e);
+        var (wedge, choice, inRing) = Hit(pos);
         if (inRing)
         {
             // On the ring: the wedge stays open, only the preset highlight moves.
             SetChoice(choice);
             SetWedge(_expanded, highlighted: choice is null);
-            return ItemAt(e);
+            return ItemAt(pos);
         }
 
         SetChoice(null);
@@ -153,6 +158,47 @@ internal sealed class WheelWindow : Window
     /// the next (wedge → ring band → preset), not only when it leaves the window; those must not close the ring.
     /// </summary>
     public bool IsOver(DragEventArgs e) => VisualTreeHelper.HitTest(_canvas, e.GetPosition(_canvas)) is not null;
+
+    /// <summary>Mouse position on the wheel, for <see cref="Hover(Point)"/> and <see cref="ItemAt(Point)"/>.</summary>
+    public Point Position(System.Windows.Input.MouseEventArgs e) => e.GetPosition(_canvas);
+
+    /// <summary>What Enter would run: the highlighted preset, else the highlighted wedge.</summary>
+    public WheelItem? Current =>
+        _highlightedChoice is { } c && _expanded is { } open ? _items[open].Choices![c] : _highlighted is { } w ? _items[w] : null;
+
+    /// <summary>Keyboard (IX-5): moves the highlight <paramref name="by"/> wedges clockwise, opening the new wedge's preset ring.</summary>
+    public void StepWedge(int by)
+    {
+        if (_items.Count == 0)
+        {
+            return;
+        }
+
+        var next = _highlighted is { } w ? ((w + by) % _items.Count + _items.Count) % _items.Count : by > 0 ? 0 : _items.Count - 1;
+        SetChoice(null);
+        Collapse();
+        if (_items[next].Choices is { Count: > 0 })
+        {
+            Expand(next);
+        }
+
+        SetWedge(next, highlighted: true);
+    }
+
+    /// <summary>Keyboard: moves through the open ring's presets; past either end it's back on the wedge itself.</summary>
+    public void StepChoice(int by)
+    {
+        if (_expanded is not { } open)
+        {
+            return;
+        }
+
+        var slots = _items[open].Choices!.Count + 1; // the wedge, then each preset
+        var at = ((_highlightedChoice ?? -1) + 1 + by) % slots;
+        var choice = (at + slots) % slots - 1;
+        SetChoice(choice < 0 ? null : choice);
+        SetWedge(open, highlighted: choice < 0);
+    }
 
     public void ClearHover()
     {
@@ -176,9 +222,8 @@ internal sealed class WheelWindow : Window
     }
 
     /// <param name="InRing">Past the disc's edge with a preset ring open: the ring owns the point, even between presets.</param>
-    private (int? Wedge, int? Choice, bool InRing) Hit(DragEventArgs e)
+    private (int? Wedge, int? Choice, bool InRing) Hit(Point pos)
     {
-        var pos = e.GetPosition(_canvas);
         var (dx, dy) = (pos.X - Centre.X, pos.Y - Centre.Y);
         if (_expanded is { } open && Math.Sqrt(dx * dx + dy * dy) > WheelGeometry.DiscRadius)
         {

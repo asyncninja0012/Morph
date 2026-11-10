@@ -50,6 +50,7 @@ public sealed partial class App : Application
     private TrayIcon? _tray;
     private ToastHost? _toasts;
     private DragWheelController? _wheel;
+    private GlobalHotkey? _hotkey;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -92,6 +93,17 @@ public sealed partial class App : Application
         });
         _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
         _wheel.ItemDropped += OnItemDropped;
+        try
+        {
+            _hotkey = new GlobalHotkey();
+            _hotkey.Pressed += OnHotkey;
+            _log.LogInformation("Hotkey {Hotkey} registered", GlobalHotkey.Name);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(ex, "Hotkey {Hotkey} is taken by another app; the keyboard wheel is off", GlobalHotkey.Name);
+        }
+
         Jobs.Updated += LogResult;
         Jobs.Updated += u => Dispatcher.BeginInvoke(() =>
         {
@@ -141,6 +153,28 @@ public sealed partial class App : Application
         {
             _log.LogInformation("{Tool} {Status} in {Ms:F0} ms: {Inputs} -> {Outputs}", u.Request.ToolId, r.Status,
                 r.Elapsed.TotalMilliseconds, string.Join(", ", u.Request.Inputs), string.Join(", ", r.Outputs));
+        }
+    }
+
+    // The keyboard path (IX-5): the selection in the Explorer window or desktop in front opens the wheel at the cursor.
+    // Runs inside the hotkey message up to the first await, so the wheel can take the foreground (see OpenForSelectionAsync).
+    private async void OnHotkey(nint foreground)
+    {
+        if (_wheel is null || !ExplorerSelection.IsShellWindow(foreground))
+        {
+            _log.LogInformation("Hotkey: not in File Explorer or on the desktop");
+            return;
+        }
+
+        var selection = ExplorerSelection.GetAsync(foreground);
+        try
+        {
+            await _wheel.OpenForSelectionAsync(foreground, selection);
+            _log.LogInformation("Hotkey: {Count} selected file(s): {Files}", selection.Result.Count, string.Join(", ", selection.Result));
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidCastException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+        {
+            _log.LogWarning(ex, "Hotkey: couldn't read the Explorer selection");
         }
     }
 
@@ -292,6 +326,7 @@ public sealed partial class App : Application
     {
         _log.LogInformation("Morph exiting");
         _tray?.Dispose();
+        _hotkey?.Dispose();
         _wheel?.Dispose();
         _dragGestures.Dispose();
         _logs?.Dispose();

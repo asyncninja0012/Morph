@@ -29,6 +29,14 @@ internal static class NativeWindows
         return hwnd;
     }
 
+    /// <summary>The keyboard path (IX-5) needs the wheel to take focus; drags must never (WS_EX_NOACTIVATE).</summary>
+    public static void SetActivatable(HWND hwnd, bool activatable)
+    {
+        var exStyle = (WINDOW_EX_STYLE)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+        exStyle = activatable ? exStyle & ~WINDOW_EX_STYLE.WS_EX_NOACTIVATE : exStyle | WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+        PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
+    }
+
     /// <summary>
     /// Moves (and optionally shows) without activating. Called twice because crossing to a monitor with another DPI
     /// makes WPF apply the system's suggested rect; the second call lands on the exact rect.

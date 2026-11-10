@@ -50,3 +50,11 @@ DwmExtendFrameIntoClientArea
 DWMWINDOWATTRIBUTE
 DWM_SYSTEMBACKDROP_TYPE
 DWM_WINDOW_CORNER_PREFERENCE
+RegisterHotKey
+UnregisterHotKey
+WM_HOTKEY
+FindWindowEx
+GetClassName
+IServiceProvider
+IShellBrowser
+SetForegroundWindow

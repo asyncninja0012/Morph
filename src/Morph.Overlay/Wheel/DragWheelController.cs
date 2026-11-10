@@ -13,7 +13,8 @@ namespace Morph.Overlay.Wheel;
 /// <summary>
 /// Modifier pressed during a drag → show invisible drop catchers at once (the probe runs during the hold) →
 /// once the key has been held for <see cref="HoldDelay"/> and an OLE file drag has entered the catchers, show the wheel
-/// at the cursor. Releasing the key closes it (PLAN §3, IX-1/IX-4). Lives on the UI thread; create it there.
+/// at the cursor. Releasing the key closes it (PLAN §3, IX-1/IX-4). The keyboard path (IX-5) opens the same wheel for an
+/// Explorer selection with <see cref="OpenForSelection"/>. Lives on the UI thread; create it there.
 /// </summary>
 public sealed class DragWheelController : IDisposable
 {
@@ -55,6 +56,10 @@ public sealed class DragWheelController : IDisposable
         _wheel.DragOver += OnWheelDragOver;
         _wheel.DragLeave += OnWheelDragLeave;
         _wheel.Drop += OnWheelDrop;
+        _wheel.PreviewKeyDown += OnWheelKey;
+        _wheel.MouseMove += (_, e) => _wheel.Hover(_wheel.Position(e));
+        _wheel.MouseLeftButtonUp += (_, e) => Apply(_wheel.ItemAt(_wheel.Position(e)));
+        _wheel.Deactivated += (_, _) => Hide("keyboard wheel lost focus");
         EnsureCatchers(NativeWindows.MonitorRects().Count);
 
         _detector.GestureDetected += OnGesture;
@@ -79,7 +84,118 @@ public sealed class DragWheelController : IDisposable
         _catchers.ForEach(c => c.Dispose());
     }
 
-    private enum State { Idle, Probing, WheelOpen }
+    private enum State { Idle, Probing, WheelOpen, KeyboardOpen }
+
+    /// <summary>
+    /// The keyboard path (IX-5): opens the Convert wheel at the cursor, with focus, for the files <paramref name="selection"/>
+    /// yields. ←/→ pick a wedge, ↑/↓ a preset on its ring, Enter runs, Tab/Shift+Tab switch Convert/Tools/Actions, Esc or
+    /// clicking elsewhere closes. Call it straight from the hotkey message: Windows lets Morph take the foreground only
+    /// until the next input goes elsewhere (the hotkey's own key-ups), so the wheel shows and activates before the
+    /// selection is read, then fills in. Nothing selected: it closes and gives the focus back to <paramref name="previous"/>.
+    /// </summary>
+    public async Task OpenForSelectionAsync(nint previous, Task<IReadOnlyList<string>> selection)
+    {
+        if (_state != State.Idle)
+        {
+            return;
+        }
+
+        _pressTimestamp = Stopwatch.GetTimestamp();
+        _files = [];
+        _virtualFiles = false;
+        _group = ModifierKey.Shift;
+        _wheel.SetContent([], "…", "", _dark);
+        _wheel.ShowAt(NativeWindows.CursorPosition());
+        _state = State.KeyboardOpen;
+        NativeWindows.SetActivatable(_wheel.Hwnd, true);
+        _wheel.Activate();
+
+        IReadOnlyList<string> files;
+        try
+        {
+            files = await selection;
+        }
+        finally
+        {
+            if (!selection.IsCompletedSuccessfully)
+            {
+                Hide("keyboard wheel: selection failed");
+            }
+        }
+
+        if (_state != State.KeyboardOpen)
+        {
+            return; // closed while the selection was read
+        }
+
+        if (files.Count == 0)
+        {
+            Hide("keyboard wheel: nothing selected");
+            Windows.Win32.PInvoke.SetForegroundWindow(new Windows.Win32.Foundation.HWND(previous));
+            return;
+        }
+
+        _files = files;
+        var (count, caption) = Describe(files);
+        _wheel.SetContent(_itemsFor(_group, files), count, caption, _dark);
+        Diagnostic?.Invoke($"keyboard wheel: {files.Count} file(s) {Elapsed()} after press");
+    }
+
+    private void OnWheelKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (_state != State.KeyboardOpen)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var back = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift);
+        switch (e.Key)
+        {
+            case System.Windows.Input.Key.Right:
+                _wheel.StepWedge(1);
+                break;
+            case System.Windows.Input.Key.Left:
+                _wheel.StepWedge(-1);
+                break;
+            case System.Windows.Input.Key.Up:
+                _wheel.StepChoice(1);
+                break;
+            case System.Windows.Input.Key.Down:
+                _wheel.StepChoice(-1);
+                break;
+            case System.Windows.Input.Key.Tab:
+                _group = (ModifierKey)(((int)_group + (back ? 2 : 1)) % 3);
+                var (count, caption) = Describe(_files);
+                _wheel.SetContent(_itemsFor(_group, _files), count, caption, _dark);
+                break;
+            case System.Windows.Input.Key.Enter:
+                Apply(_wheel.Current);
+                break;
+            case System.Windows.Input.Key.Escape:
+                Hide("Esc");
+                break;
+            default:
+                e.Handled = false;
+                break;
+        }
+    }
+
+    // Keyboard path: Enter or a click. Nothing highlighted (or the centre) closes the wheel without running anything.
+    private void Apply(WheelItem? item)
+    {
+        if (_state != State.KeyboardOpen)
+        {
+            return;
+        }
+
+        var files = _files;
+        Hide(item is null ? "keyboard wheel: nothing chosen" : $"chose {item.Id}");
+        if (item is not null)
+        {
+            ItemDropped?.Invoke(item, new DroppedFiles(files, Virtual: false));
+        }
+    }
 
     /// <summary>
     /// Renders every window once off-screen at startup so the first real show skips JIT and render setup
@@ -325,9 +441,15 @@ public sealed class DragWheelController : IDisposable
             return;
         }
 
+        var keyboard = _state == State.KeyboardOpen;
+        _state = State.Idle; // first: hiding the active wheel raises Deactivated, which calls back in here
         _wheel.Hide();
+        if (keyboard)
+        {
+            NativeWindows.SetActivatable(_wheel.Hwnd, false);
+        }
+
         _catchers.ForEach(c => c.Hide());
-        _state = State.Idle;
         _files = [];
         Diagnostic?.Invoke($"hidden: {reason}");
     }

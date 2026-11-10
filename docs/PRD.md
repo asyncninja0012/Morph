@@ -45,7 +45,7 @@ Keyboard path, no bloat
 • IX-2 The wheel opens centred on the cursor within 100 ms of the 200 ms hold threshold, stays open while the key is held until drop, release or Esc, and never takes focus from the source window.
 • IX-3 The wheel shows only options valid for every file in the drag. Options with sub-choices expand an outer ring on hover.
 • IX-4 Dropping outside a wedge cancels; releasing the key or pressing Esc without dropping closes the wheel and the drag continues as a normal drag.
-• IX-5 Keyboard path: with files selected in Explorer, a global hotkey (default Ctrl+Alt+Space) opens the same wheel at the cursor; arrows choose, Enter applies, Tab switches wheel.
+• IX-5 Keyboard path: with files selected in Explorer, a global hotkey (default Alt+Shift+Space; Ctrl+Alt+Space was dropped 10 Nov 2026, developer's call: Claude's desktop app holds it) opens the same wheel at the cursor; arrows choose, Enter applies, Tab switches wheel.
 • IX-6 Right-click menu: a "Pith" submenu in Explorer with Convert, Tools and Actions, mirroring the wheel.
 • IX-7 Wheel ordering learns from use; users can pin and reorder options in Settings.
 6.2 Conversions
