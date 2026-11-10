@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Phase 2 complete (10 Nov 2026, alpha): documents, PDF, sheets, subtitles and archives conversions, instant tools, Protect/Unlock, job history with Cancel and Undo, the Alt+Shift+Space keyboard wheel, pictures and ruled tables in documents.
+
 Phase 1 complete (5 Nov 2026): image, video and audio conversions from the wheel, job queue, failure toasts, golden tests, logging and tray icon.
 
 Phase 0 (spikes) complete: drag wheel, image and video conversion in a sandboxed worker, MSIX packaging.
