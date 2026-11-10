@@ -14,6 +14,7 @@ using Morph.Core.Jobs;
 using Morph.Core.Logging;
 using Morph.Core.Settings;
 using Morph.Editors;
+using Morph.Editors.Crop;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
 
@@ -29,23 +30,19 @@ public sealed partial class App : Application
     private static volatile bool _canEncodeHeic;
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
-    // shortcut: static Tools/Actions wedges from the task 0.3 spike; they move into capabilities.json as their engines land (crop: 3.x).
-    private static readonly WheelItem[] PlaceholderTools =
-    [
-        new("crop", "Crop", ""),
-    ];
-
+    // shortcut: static Actions wedges from the task 0.3 spike; they move into capabilities.json as they land (3.7, 3.8).
     private static readonly WheelItem[] ActionItems =
     [
         new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""), new("action.copy-path", "Copy path", ""),
         new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
     ];
 
-    // Tools that open in the editor shell (ED-6), by tool id. Crop, Annotate, Redact, Trim and the page organizer land in 3.2-3.6.
-    private static readonly Dictionary<string, Func<IEditor>> Editors = [];
+    private static readonly string WorkerPath = Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe");
 
-    private static readonly JobQueue Jobs = new((request, progress, ct) =>
-        WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
+    private static readonly JobQueue Jobs = new((request, progress, ct) => WorkerClient.RunAsync(WorkerPath, request, progress, ct));
+
+    // Tools that open in the editor shell (ED-6), by tool id. Annotate, Redact, Trim and the page organizer land in 3.3-3.6.
+    private readonly Dictionary<string, Func<IEditor>> _editors = [];
 
     private readonly DragGestureDetector _dragGestures = new();
     private readonly JobHistory _history = new(TimeProvider.System);
@@ -96,6 +93,8 @@ public sealed partial class App : Application
             _tray = new TrayIcon(bytes.ToArray(), _log);
         }
 
+        _editors["crop"] = () => new CropEditor((path, ct) => PreviewAsync("crop", path, ct));
+
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;
         _tray.HistoryClicked += ShowHistory;
@@ -105,7 +104,7 @@ public sealed partial class App : Application
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
         {
             ModifierKey.Shift => MatrixItems(files, WheelGroup.Convert),
-            ModifierKey.Ctrl => [.. MatrixItems(files, WheelGroup.Tools), .. PlaceholderTools],
+            ModifierKey.Ctrl => MatrixItems(files, WheelGroup.Tools),
             _ => ActionItems,
         });
         _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
@@ -216,7 +215,7 @@ public sealed partial class App : Application
             return;
         }
 
-        if (Editors.TryGetValue(ToolId(item), out var editor))
+        if (_editors.TryGetValue(ToolId(item), out var editor))
         {
             EditAsync(editor(), item, files);
             return;
@@ -327,6 +326,49 @@ public sealed partial class App : Application
             _toasts?.Track(jobs, files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files");
             _history.Add(tool.Label, files.Paths, jobs);
             _historyWindow?.Refresh();
+        }
+    }
+
+    // An editor's picture of a file: the Worker of the tool's engine renders it into a temp folder as raw pixels
+    // (PreviewFile), so the App never decodes a dropped file itself.
+    private async Task<PreviewImage> PreviewAsync(string tool, string path, CancellationToken ct)
+    {
+        var name = Path.GetFileName(path);
+        var row = Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)
+            ?? throw new EngineException($"{name} can't be opened here.", $"no {tool} row for {path}");
+        var folder = await Task.Run(() => Directory.CreateTempSubdirectory("morph-preview-").FullName, ct);
+        try
+        {
+            var result = await WorkerClient.RunAsync(WorkerPath,
+                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048 }), null, ct);
+            ct.ThrowIfCancellationRequested();
+            if (result.Status != JobStatus.Succeeded || result.Outputs is not [var preview])
+            {
+                throw new EngineException(result.UserMessage ?? "Morph couldn't read it.", result.Details);
+            }
+
+            try
+            {
+                return await PreviewFile.ReadAsync(preview, ct);
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new EngineException("Morph couldn't read it.", ex.ToString());
+            }
+        }
+        finally
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                catch (IOException ex)
+                {
+                    _log.LogWarning(ex, "Couldn't delete the preview folder {Folder}", folder);
+                }
+            }, CancellationToken.None);
         }
     }
 

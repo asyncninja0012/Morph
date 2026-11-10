@@ -75,6 +75,25 @@ internal static class Presets
     public static string Password(JsonObject? parameters) =>
         (string?)parameters?["password"] is { Length: > 0 } password ? password : throw new EngineException("Type a password first.", "no password parameter");
 
+    /// <summary>
+    /// Crop (ED-1): { "x", "y", "w", "h" } from the crop editor, in the source's units (pixels; points for PDF pages), top-left
+    /// origin as the file is shown. Clamped to the source, which a box chosen on another file of a drop may not fit.
+    /// </summary>
+    public static (double X, double Y, double W, double H) Crop(JsonObject? parameters, double sourceWidth, double sourceHeight, string name)
+    {
+        if (Number(parameters?["x"]) is not { } x || Number(parameters?["y"]) is not { } y
+            || Number(parameters?["w"]) is not { } w || Number(parameters?["h"]) is not { } h)
+        {
+            throw new EngineException("Choose what to keep first.", "no crop box");
+        }
+
+        var (left, top) = (Math.Clamp(x, 0, sourceWidth), Math.Clamp(y, 0, sourceHeight));
+        var (right, bottom) = (Math.Clamp(x + w, 0, sourceWidth), Math.Clamp(y + h, 0, sourceHeight));
+        return right - left >= 1 && bottom - top >= 1
+            ? (left, top, right - left, bottom - top)
+            : throw new EngineException($"The crop box is outside {name}.", $"box {x},{y} {w}x{h} on {sourceWidth}x{sourceHeight}");
+    }
+
     // Any JSON number: a JsonObject built in code holds an int where parsed JSON would give a double.
     private static double? Number(JsonNode? node) =>
         node is null ? null : double.Parse(node.ToJsonString(), NumberStyles.Float, CultureInfo.InvariantCulture);

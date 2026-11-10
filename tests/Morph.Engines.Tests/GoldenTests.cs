@@ -340,6 +340,82 @@ public sealed class GoldenTests : IDisposable
         return stdout.Contains("Secret", StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, string> CropRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "crop"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-1: the editor's preview gives the file's own size (pixels; PDF points) and fits the size asked for; crop keeps exactly
+    // the box (images: the fixture's red rectangle at 10,10 60×50; PDF: 60×50 pt, which renders at 150 DPI as 125×104).
+    [Theory]
+    [MemberData(nameof(CropRows))]
+    public async Task Crop_row_previews_and_crops(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        if (engine == "media")
+        {
+            Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+            Assert.SkipWhen(from != "webm" && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        }
+
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+
+        var previewPath = Assert.Single((await RunAsync(PreviewFile.ToolId, engine, [input], ct, new() { ["maxEdge"] = 64 })).Outputs);
+        var preview = await PreviewFile.ReadAsync(previewPath, ct);
+        Assert.Equal(engine switch { "pdf" => (216.0, 144.0), "media" => (320.0, 240.0), _ => (160.0, 120.0) }, (preview.SourceWidth, preview.SourceHeight));
+        Assert.Equal(64, Math.Max(preview.Width, preview.Height));
+        File.Delete(previewPath);
+
+        var output = Assert.Single((await RunAsync("crop", engine, [input], ct, new() { ["x"] = 10, ["y"] = 10, ["w"] = 60, ["h"] = 50 })).Outputs);
+        Assert.Equal(Path.GetFileNameWithoutExtension(input) + "-cropped", Path.GetFileNameWithoutExtension(output));
+        switch (engine)
+        {
+            case "imaging":
+                using (var image = new MagickImage(output))
+                {
+                    Assert.Equal((60u, 50u), (image.Width, image.Height));
+                    var centre = image.GetPixels().GetPixel(30, 25)!.ToColor()!;
+                    Assert.True(centre.R > 200 && centre.G < 60 && centre.B < 60, $"centre is {centre}, not red");
+                }
+
+                break;
+            case "media":
+                Assert.Equal("60x50", (await ProbeAsync(output, ct)).Size);
+                break;
+            default:
+                foreach (var page in await RenderAsync(output, ct))
+                {
+                    using var image = new MagickImage(page);
+                    Assert.Equal((125u, 104u), (image.Width, image.Height));
+                }
+
+                break;
+        }
+    }
+
+    [Fact]
+    public async Task Crop_of_the_whole_picture_is_skipped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var input = Path.Combine(_dir, "sample.png");
+        File.Copy(Path.Combine(Fixtures, "sample.png"), input);
+
+        var result = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), "crop", "imaging", [input], _dir,
+            new() { ["x"] = 0, ["y"] = 0, ["w"] = 160, ["h"] = 120 }), null, ct);
+
+        Assert.Equal((JobStatus.Failed, "sample.png is already that size."), (result.Status, result.UserMessage));
+        Assert.Equal([input], Directory.GetFiles(_dir));
+    }
+
     public static TheoryData<string, string> PasswordRows()
     {
         var rows = new TheoryData<string, string>();

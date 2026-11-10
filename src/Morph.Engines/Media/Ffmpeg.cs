@@ -10,8 +10,14 @@ namespace Morph.Engines.Media;
 /// <param name="Duration">Seconds, or null when unknown.</param>
 /// <param name="AudioKbps">The audio stream's bit rate, or the whole file's for an audio-only file; null when unknown.</param>
 /// <param name="Fps">The video's average frame rate as ffmpeg writes it ("30000/1001"); null when unknown.</param>
+/// <param name="Width">Stored size; a phone video filmed upright may be stored sideways, see <see cref="ShownSize"/>.</param>
+/// <param name="Rotation">Degrees the player turns the picture (display matrix), as ffprobe reports it.</param>
 public sealed record MediaInfo(double? Duration, string? VideoCodec, string? PixelFormat, string? AudioCodec,
-    int Width = 0, int Height = 0, double? AudioKbps = null, string? Fps = null);
+    int Width = 0, int Height = 0, double? AudioKbps = null, string? Fps = null, int Rotation = 0)
+{
+    /// <summary>The size players show (and ffmpeg's filters see, since it turns the picture upright when decoding).</summary>
+    public (int Width, int Height) ShownSize => Math.Abs(Rotation) % 180 == 90 ? (Height, Width) : (Width, Height);
+}
 
 /// <summary>Runs the bundled LGPL ffmpeg.exe/ffprobe.exe (PLAN §5). Never a system copy: that could be a GPL build.</summary>
 public sealed class Ffmpeg(string directory)
@@ -28,7 +34,7 @@ public sealed class Ffmpeg(string directory)
     public async Task<MediaInfo> ProbeAsync(string input, string demuxer, CancellationToken ct)
     {
         var (exit, stdout, _) = await RunAsync(FfprobePath,
-            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration,bit_rate:stream=codec_type,codec_name,pix_fmt,width,height,bit_rate,avg_frame_rate,disposition",
+            ["-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-show_entries", "format=duration,bit_rate:stream=codec_type,codec_name,pix_fmt,width,height,bit_rate,avg_frame_rate,disposition:stream_side_data=rotation",
                 "-of", "json", input],
             onStdoutLine: null, ct).ConfigureAwait(false);
         if (exit != 0 || JsonNode.Parse(stdout) is not { } json)
@@ -44,7 +50,8 @@ public sealed class Ffmpeg(string directory)
         var audioKbps = Number(audio?["bit_rate"]) ?? (video is null ? Number(json["format"]?["bit_rate"]) : null);
         return new MediaInfo(duration, (string?)video?["codec_name"], (string?)video?["pix_fmt"], (string?)audio?["codec_name"],
             (int?)video?["width"] ?? 0, (int?)video?["height"] ?? 0, audioKbps / 1000,
-            (string?)video?["avg_frame_rate"] is { } fps && fps != "0/0" ? fps : null);
+            (string?)video?["avg_frame_rate"] is { } fps && fps != "0/0" ? fps : null,
+            (int?)(video?["side_data_list"]?.AsArray().FirstOrDefault(d => d?["rotation"] is not null)?["rotation"]) ?? 0);
     }
 
     private static double? Number(JsonNode? node) =>

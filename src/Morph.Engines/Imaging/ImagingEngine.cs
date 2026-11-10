@@ -9,7 +9,8 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
-/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate and strip-metadata (IT-1..3) keep the format.
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate, strip-metadata (IT-1..3) and crop (ED-1) keep
+/// the format; preview feeds the editors.
 /// </summary>
 public sealed class ImagingEngine : IEngine
 {
@@ -55,7 +56,14 @@ public sealed class ImagingEngine : IEngine
             return;
         }
 
-        if (job.ToolId is "rotate" or "strip-metadata")
+        if (job.ToolId == PreviewFile.ToolId)
+        {
+            using var image = await ReadAsync(job.Inputs[0], ct).ConfigureAwait(false);
+            await Preview.WriteAsync(image, image.Width, image.Height, job, namer, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (job.ToolId is "rotate" or "strip-metadata" or "crop")
         {
             await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
             return;
@@ -170,20 +178,35 @@ public sealed class ImagingEngine : IEngine
         }
     }
 
-    // Rotate turns the upright picture (EXIF orientation already applied). Strip info drops EXIF (GPS, camera, dates), XMP, IPTC
+    // Rotate turns and crop cuts the upright picture (EXIF orientation already applied, as the crop editor showed it). Strip info drops EXIF (GPS, camera, dates), XMP, IPTC
     // and comments but keeps the colour profile. shortcut: lossy formats re-encode (JPEG at the quality Magick reads from the file,
     // WebP/AVIF at Magick's defaults); a lossless JPEG path (jpegtran-style) if users notice.
     private static async Task EditAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
         var rotate = job.ToolId == "rotate";
         var (degrees, flip) = Presets.Rotate(job.Parameters);
+        string? skipped = null;
+        var made = 0;
         for (var i = 0; i < job.Inputs.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             var input = job.Inputs[i];
             var format = Targets[(await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id];
             using var image = await ReadAsync(input, ct).ConfigureAwait(false);
-            if (rotate)
+            if (job.ToolId == "crop")
+            {
+                var (x, y, w, h) = Presets.Crop(job.Parameters, image.Width, image.Height, Path.GetFileName(input));
+                var box = new MagickGeometry((int)Math.Round(x), (int)Math.Round(y), (uint)Math.Max(1, Math.Round(w)), (uint)Math.Max(1, Math.Round(h)));
+                if (box.Width >= image.Width && box.Height >= image.Height)
+                {
+                    skipped = $"{Path.GetFileName(input)} is already that size.";
+                    continue;
+                }
+
+                image.Crop(box);
+                image.ResetPage();
+            }
+            else if (rotate)
             {
                 image.Rotate(degrees);
                 if (flip == "horizontal")
@@ -206,9 +229,15 @@ public sealed class ImagingEngine : IEngine
                 image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time"); // Magick's own date:create/modify text
             }
 
-            var pending = namer.Reserve(input, Path.GetExtension(input), rotate ? "-rotated" : "-stripped");
+            var pending = namer.Reserve(input, Path.GetExtension(input), job.ToolId switch { "rotate" => "-rotated", "crop" => "-cropped", _ => "-stripped" });
             await File.WriteAllBytesAsync(pending.Path, image.ToByteArray(format), ct).ConfigureAwait(false);
+            made++;
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
         }
     }
 

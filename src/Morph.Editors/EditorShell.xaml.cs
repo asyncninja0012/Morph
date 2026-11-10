@@ -66,6 +66,15 @@ public sealed partial class EditorShell : Window
             }
         };
         Loaded += (_, _) => ShowCurrent();
+        // The editor grows once its file loads; keep the window centred where it opened (until the user resizes it).
+        SizeChanged += (_, e) =>
+        {
+            if (IsLoaded && SizeToContent != SizeToContent.Manual && e.PreviousSize.Width > 0)
+            {
+                Left -= (e.NewSize.Width - e.PreviousSize.Width) / 2;
+                Top -= (e.NewSize.Height - e.PreviousSize.Height) / 2;
+            }
+        };
         Closed += (_, _) =>
         {
             _closing.Cancel();
@@ -127,6 +136,9 @@ public sealed partial class EditorShell : Window
         DoneButton.IsEnabled = UndoButton.IsEnabled = false;
         EditorHost.Visibility = Visibility.Visible;
         MessageText.Visibility = Visibility.Collapsed;
+        // While the next file loads, the editor still shows the last one: dim it and take no input there.
+        (EditorHost.IsEnabled, EditorHost.Opacity) = (false, 0.4);
+        CancelButton.Focus(); // so Esc still works
         ShowHeader();
         var file = _session.Current;
         try
@@ -147,6 +159,7 @@ public sealed partial class EditorShell : Window
             MessageText.Visibility = Visibility.Visible;
         }
 
+        (EditorHost.IsEnabled, EditorHost.Opacity) = (true, 1);
         ShowHeader();
         DoneButton.IsEnabled = true;
         UndoButton.IsEnabled = _shown && _editor.CanUndo;

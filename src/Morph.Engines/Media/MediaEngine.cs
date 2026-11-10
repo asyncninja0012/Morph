@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 
+using ImageMagick;
+
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
 
@@ -9,7 +11,8 @@ namespace Morph.Engines.Media;
 /// <summary>
 /// Video and audio conversion through ffmpeg (PLAN §5): video → MP4/WebM/GIF/MP3, audio ↔ audio. Compress and resize
 /// (IT-1, IT-2): MKV and WebM stay themselves, other video becomes H.264 MP4, WAV/FLAC become M4A, lossy audio keeps its format.
-/// Instant tools (IT-3): rotate, strip-metadata, extract-audio, mute, make-gif, and merge in the order given.
+/// Instant tools (IT-3): rotate, strip-metadata, extract-audio, mute, make-gif, and merge in the order given. Crop (ED-1) re-encodes
+/// like rotate; preview is one frame for the editors.
 /// </summary>
 public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 {
@@ -52,7 +55,10 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             case "compress" or "resize":
                 await ShrinkAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
-            case "rotate" or "strip-metadata" or "extract-audio" or "mute":
+            case PreviewFile.ToolId:
+                await PreviewAsync(job, namer, ct).ConfigureAwait(false);
+                return;
+            case "rotate" or "strip-metadata" or "extract-audio" or "mute" or "crop":
                 await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
             case "merge":
@@ -273,7 +279,7 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             var fileProgress = new SyncProgress<JobProgress>(p =>
                 progress.Report(p with { Fraction = double.IsNaN(p.Fraction) ? p.Fraction : (done + p.Fraction) / job.Inputs.Count }));
 
-            if (job.ToolId is "rotate" or "mute" && info.VideoCodec is null)
+            if (job.ToolId is "rotate" or "mute" or "crop" && info.VideoCodec is null)
             {
                 throw new EngineException($"{name} has no picture.");
             }
@@ -284,10 +290,18 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
                 continue;
             }
 
+            string? crop = null;
+            if (job.ToolId == "crop" && (crop = CropFilter(job.Parameters, info, name)) is null)
+            {
+                skipped = $"{name} is already that size.";
+                continue;
+            }
+
             // 0:V leaves out cover art: strip info drops it (a picture can carry its own EXIF), mute has no use for it.
             var (extension, suffix, keepMetadata, output) = job.ToolId switch
             {
-                "rotate" => await RotateArgsAsync(format, info, transform, ct).ConfigureAwait(false),
+                "rotate" => await RotateArgsAsync(format, info, transform, "-rotated", ct).ConfigureAwait(false),
+                "crop" => await RotateArgsAsync(format, info, crop!, "-cropped", ct).ConfigureAwait(false),
                 "strip-metadata" =>
                 (
                     format.Id, "-stripped", false,
@@ -309,12 +323,50 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
         }
     }
 
-    private async Task<(string, string, bool, string[])> RotateArgsAsync(FileFormat format, MediaInfo info, string transform, CancellationToken ct)
+    private async Task<(string, string, bool, string[])> RotateArgsAsync(FileFormat format, MediaInfo info, string transform, string suffix, CancellationToken ct)
     {
         var container = format.Id is "mkv" or "webm" ? format.Id : "mp4";
         var video = await VideoArgsAsync(container, null, 23, kbps: null, ct, transform).ConfigureAwait(false);
         string[] audio = CopyAudio(container, info.AudioCodec) ? ["-c:a", "copy"] : VideoOutputs[Muxer(container)].Audio;
-        return (container, "-rotated", true, Video(video, audio, container));
+        return (container, suffix, true, Video(video, audio, container));
+    }
+
+    // The editor's box on the upright picture, on even pixels (4:2:0); null when it keeps the whole frame.
+    private static string? CropFilter(System.Text.Json.Nodes.JsonObject? parameters, MediaInfo info, string name)
+    {
+        var (width, height) = info.ShownSize;
+        var (x, y, w, h) = Presets.Crop(parameters, width, height, name);
+        var (left, top) = ((int)x / 2 * 2, (int)y / 2 * 2);
+        var (cw, ch) = (Math.Max(2, (int)Math.Round(w) / 2 * 2), Math.Max(2, (int)Math.Round(h) / 2 * 2));
+        return cw >= width / 2 * 2 && ch >= height / 2 * 2 ? null : FormattableString.Invariant($"crop={cw}:{ch}:{left}:{top}");
+    }
+
+    // Editors: one frame 1 s in (or halfway through a shorter clip), past most fade-ins, upright as players show it.
+    // ffmpeg writes it as a PNG into the preview folder, which Magick then reads; the PNG is deleted afterwards.
+    private async Task PreviewAsync(JobRequest job, OutputNamer namer, CancellationToken ct)
+    {
+        var input = job.Inputs[0];
+        var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+        var demuxer = Demuxer(input, format);
+        var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+        if (info.VideoCodec is null)
+        {
+            throw new EngineException($"{Path.GetFileName(input)} has no picture.");
+        }
+
+        var at = info.Duration is { } d ? Math.Min(1, d / 2) : 0;
+        var frame = namer.Reserve(input, ".png", "-frame");
+        try
+        {
+            await EncodeAsync(input, demuxer, ["-ss", at.ToString("0.###", CultureInfo.InvariantCulture), "-map", "0:V:0", "-frames:v", "1", "-c:v", "png", "-f", "image2"],
+                frame.Path, info, new SyncProgress<JobProgress>(_ => { }), ct, keepMetadata: false).ConfigureAwait(false);
+            using var image = new MagickImage(frame.Path, new MagickReadSettings { Format = MagickFormat.Png });
+            await Preview.WriteAsync(image, image.Width, image.Height, job, namer, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            namer.Discard(frame);
+        }
     }
 
     // The sound as it is when a plain audio file can hold it (video.mp4 → video.m4a in seconds), else AAC in M4A.

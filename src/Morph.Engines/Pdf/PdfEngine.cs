@@ -13,7 +13,8 @@ namespace Morph.Engines.Pdf;
 /// <summary>
 /// PDF → JPG/PNG (one image per page at 150 DPI) and PDF → TXT (CV-2) with PDFium. Tool ids: convert.jpg/png/txt.
 /// A multi-page PDF gives report-1.png, report-2.png, ... next to the original.
-/// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>.
+/// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>. Crop sets page
+/// boxes (<see cref="PdfCrop"/>); preview is page 1 for the editors.
 /// </summary>
 public sealed class PdfEngine : IEngine
 {
@@ -40,6 +41,18 @@ public sealed class PdfEngine : IEngine
         if (job.ToolId == "strip-metadata")
         {
             Strip(job, namer, progress, ct);
+            return;
+        }
+
+        if (job.ToolId == "crop")
+        {
+            PdfCrop.Run(job, namer, progress, ct);
+            return;
+        }
+
+        if (job.ToolId == PreviewFile.ToolId)
+        {
+            await PreviewAsync(job, namer, ct).ConfigureAwait(false);
             return;
         }
 
@@ -145,6 +158,51 @@ public sealed class PdfEngine : IEngine
         finally
         {
             document.Dispose();
+        }
+    }
+
+    // Page 1 as shown (rotation applied) at about the size asked for; its size in points is what the editors return.
+    private static async Task PreviewAsync(JobRequest job, OutputNamer namer, CancellationToken ct)
+    {
+        var input = job.Inputs[0];
+        if ((await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id != "pdf")
+        {
+            throw new EngineException($"{Path.GetFileName(input)} isn't a PDF.");
+        }
+
+        MagickImage image;
+        double widthPt, heightPt;
+        lock (Pdfium.Sync)
+        {
+            var (doc, _) = Open(input);
+            try
+            {
+                var page = Pdfium.FPDF_LoadPage(doc, 0);
+                if (page == 0)
+                {
+                    throw new EngineException($"Page 1 of {Path.GetFileName(input)} is damaged.", $"PDFium error {Pdfium.FPDF_GetLastError()}");
+                }
+
+                try
+                {
+                    (widthPt, heightPt) = (Pdfium.FPDF_GetPageWidthF(page), Pdfium.FPDF_GetPageHeightF(page));
+                    var maxEdge = Math.Clamp(job.Parameters?["maxEdge"]?.GetValue<int>() ?? 2048, 64, PreviewFile.MaxEdge);
+                    image = RenderImage(page, Math.Min(300, 72 * maxEdge / Math.Max(1, Math.Max(widthPt, heightPt))));
+                }
+                finally
+                {
+                    Pdfium.FPDF_ClosePage(page);
+                }
+            }
+            finally
+            {
+                Pdfium.FPDF_CloseDocument(doc);
+            }
+        }
+
+        using (image)
+        {
+            await Preview.WriteAsync(image, widthPt, heightPt, job, namer, ct).ConfigureAwait(false);
         }
     }
 
