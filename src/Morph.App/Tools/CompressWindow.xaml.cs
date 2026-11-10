@@ -45,6 +45,7 @@ public sealed partial class CompressWindow : Window
         TargetCheck.Click += (_, _) => Validate();
         TargetBox.TextChanged += (_, _) => Validate();
         TargetUnit.SelectionChanged += (_, _) => Validate();
+        CancelButton.Click += (_, _) => Close(); // IsCancel closes only a ShowDialog window
         RunButton.Click += (_, _) =>
         {
             RunClicked?.Invoke(Parameters());

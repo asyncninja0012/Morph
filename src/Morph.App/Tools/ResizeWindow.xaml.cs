@@ -48,6 +48,7 @@ public sealed partial class ResizeWindow : Window
         WidthBox.TextChanged += (_, _) => Validate();
         HeightBox.TextChanged += (_, _) => Validate();
         KeepRatio.Click += (_, _) => Validate();
+        CancelButton.Click += (_, _) => Close(); // IsCancel closes only a ShowDialog window
         RunButton.Click += (_, _) =>
         {
             RunClicked?.Invoke(Parameters());

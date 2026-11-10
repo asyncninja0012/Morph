@@ -46,6 +46,7 @@ public sealed partial class MergeOrderWindow : Window
         SourceInitialized += (_, _) => MorphTheme.Apply(this, dark, MorphGlass.TryApplyBackdrop(this, dark));
         _files = [.. files];
         Render();
+        CancelButton.Click += (_, _) => Close(); // IsCancel closes only a ShowDialog window
         MergeButton.Click += (_, _) =>
         {
             MergeClicked?.Invoke(_files);

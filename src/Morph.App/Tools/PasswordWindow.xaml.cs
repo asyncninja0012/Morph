@@ -46,6 +46,7 @@ public sealed partial class PasswordWindow : Window
                 Hidden.Focus();
             }
         };
+        CancelButton.Click += (_, _) => Close(); // IsCancel closes only a ShowDialog window
         RunButton.Click += (_, _) =>
         {
             RunClicked?.Invoke(Hidden.Password, StrongLock.IsChecked == true);
