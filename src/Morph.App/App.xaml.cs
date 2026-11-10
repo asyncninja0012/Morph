@@ -43,6 +43,8 @@ public sealed partial class App : Application
         WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
 
     private readonly DragGestureDetector _dragGestures = new();
+    private readonly JobHistory _history = new(TimeProvider.System);
+    private HistoryWindow? _historyWindow;
     private FileLoggerProvider? _logs;
     private ILogger _log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     private TrayIcon? _tray;
@@ -78,6 +80,7 @@ public sealed partial class App : Application
 
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;
+        _tray.HistoryClicked += ShowHistory;
         _toasts = new ToastHost(Jobs, Dispatcher, _log);
 
         _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
@@ -90,6 +93,13 @@ public sealed partial class App : Application
         _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
         _wheel.ItemDropped += OnItemDropped;
         Jobs.Updated += LogResult;
+        Jobs.Updated += u => Dispatcher.BeginInvoke(() =>
+        {
+            if (_history.Apply(u))
+            {
+                _historyWindow?.Refresh();
+            }
+        });
 
         try
         {
@@ -228,7 +238,51 @@ public sealed partial class App : Application
         if (jobs.Count > 0)
         {
             _toasts?.Track(jobs, files.Paths is [var one] ? Path.GetFileName(one) : $"{files.Paths.Count} files");
+            _history.Add(tool.Label, files.Paths, jobs);
+            _historyWindow?.Refresh();
         }
+    }
+
+    private void ShowHistory()
+    {
+        if (_historyWindow is null)
+        {
+            _historyWindow = new HistoryWindow(_history);
+            _historyWindow.UndoClicked += UndoAsync;
+            _historyWindow.Closed += (_, _) => _historyWindow = null;
+            _historyWindow.Show();
+        }
+
+        if (_historyWindow.WindowState == WindowState.Minimized)
+        {
+            _historyWindow.WindowState = WindowState.Normal;
+        }
+
+        _historyWindow.Activate();
+    }
+
+    // Undo (JB-5): the drop's outputs go to the Recycle Bin, off the UI thread.
+    private async void UndoAsync(JobHistoryEntry entry)
+    {
+        var outputs = _history.TakeUndo(entry);
+        _historyWindow?.Refresh();
+        if (outputs.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => RecycleBin.Send(outputs));
+            _log.LogInformation("Undo {Tool}: recycled {Outputs}", entry.Tool, string.Join(", ", outputs));
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            entry.UndoError = "Windows couldn't move the files to the Recycle Bin.";
+            _log.LogWarning(ex, "Undo {Tool} failed for {Outputs}", entry.Tool, string.Join(", ", outputs));
+        }
+
+        _historyWindow?.Refresh();
     }
 
     // A preset on the outer ring is "tool/choice".

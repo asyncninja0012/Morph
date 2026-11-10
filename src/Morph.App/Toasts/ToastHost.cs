@@ -96,7 +96,7 @@ public sealed class ToastHost
     }
 
     // shortcut: selects the first output only; SHOpenFolderAndSelectItems can select them all if batches need it.
-    private static void ShowInFolder(IReadOnlyList<string> outputs)
+    internal static void ShowInFolder(IReadOnlyList<string> outputs)
     {
         if (outputs is [var first, ..])
         {

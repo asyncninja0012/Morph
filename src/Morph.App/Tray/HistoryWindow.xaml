@@ -1,0 +1,16 @@
+<Window x:Class="Morph.App.Tray.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Morph jobs" Width="460" Height="560" MinWidth="360" MinHeight="240"
+        ThemeMode="System" WindowStartupLocation="CenterScreen" Background="Transparent">
+    <!-- Morph glass (MorphTheme): a warm tint over the Windows acrylic backdrop. -->
+    <Border Background="{DynamicResource MorphSurfaceBrush}" Padding="16,8,16,16">
+        <Grid>
+            <TextBlock x:Name="EmptyText" TextWrapping="Wrap" Margin="4,8,4,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="Nothing yet. Files you drop on the wheel show up here, with Undo for 10 minutes." />
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="Rows" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>
