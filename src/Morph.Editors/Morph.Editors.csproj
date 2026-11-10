@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Morph.Core\Morph.Core.csproj" />
+    <!-- Morph glass (MorphTheme, MorphGlass) and the cursor's monitor (Screens) only. -->
+    <ProjectReference Include="..\Morph.Overlay\Morph.Overlay.csproj" />
+  </ItemGroup>
+
+</Project>

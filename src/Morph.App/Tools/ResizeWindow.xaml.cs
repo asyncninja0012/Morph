@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 
-using Morph.App.Theme;
 using Morph.Overlay.Theme;
 
 namespace Morph.App.Tools;

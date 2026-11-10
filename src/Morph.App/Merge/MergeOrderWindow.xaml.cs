@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
-using Morph.App.Theme;
 using Morph.Core.Formats;
 using Morph.Overlay.Theme;
 

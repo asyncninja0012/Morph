@@ -12,6 +12,8 @@ using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Core.Logging;
+using Morph.Core.Settings;
+using Morph.Editors;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
 
@@ -39,6 +41,9 @@ public sealed partial class App : Application
         new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
     ];
 
+    // Tools that open in the editor shell (ED-6), by tool id. Crop, Annotate, Redact, Trim and the page organizer land in 3.2-3.6.
+    private static readonly Dictionary<string, Func<IEditor>> Editors = [];
+
     private static readonly JobQueue Jobs = new((request, progress, ct) =>
         WorkerClient.RunAsync(Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe"), request, progress, ct));
 
@@ -47,6 +52,7 @@ public sealed partial class App : Application
     private HistoryWindow? _historyWindow;
     private FileLoggerProvider? _logs;
     private ILogger _log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+    private Task<ToolSettings>? _toolSettings;
     private TrayIcon? _tray;
     private ToastHost? _toasts;
     private DragWheelController? _wheel;
@@ -58,13 +64,24 @@ public sealed partial class App : Application
 
         // Started from a terminal (dev): echo the log there too, with drag and wheel detail.
         var console = PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
-        _logs = new FileLoggerProvider(LogsDirectory(), console ? LogLevel.Debug : LogLevel.Information, echo: console ? Console.Out : null);
+        _logs = new FileLoggerProvider(Path.Combine(DataDirectory(), "logs"), console ? LogLevel.Debug : LogLevel.Information, echo: console ? Console.Out : null);
         _log = _logs.CreateLogger("Morph");
         DispatcherUnhandledException += (_, args) => _log.LogCritical(args.Exception, "Unhandled UI exception");
         AppDomain.CurrentDomain.UnhandledException += (_, args) => _log.LogCritical(args.ExceptionObject as Exception, "Unhandled exception");
         TaskScheduler.UnobservedTaskException += (_, args) => _log.LogError(args.Exception, "Unobserved task exception");
         _log.LogInformation("Morph {Version} starting on {Os}; logs in {Logs}",
             typeof(App).Assembly.GetName().Version, Environment.OSVersion.VersionString, _logs.Directory);
+
+        _toolSettings = Task.Run(async () =>
+        {
+            var (settings, error) = await ToolSettings.LoadAsync(Path.Combine(DataDirectory(), "settings.json"), CancellationToken.None);
+            if (error is not null)
+            {
+                _log.LogWarning(error, "settings.json couldn't be read; kept as settings.bad.json and started afresh");
+            }
+
+            return settings;
+        });
 
         _ = Task.Run(async () =>
         {
@@ -125,15 +142,15 @@ public sealed partial class App : Application
     }
 
     // Packaged, %LOCALAPPDATA% is redirected into the package, where Explorer wouldn't find it; LocalState is the real folder.
-    private static string LogsDirectory()
+    private static string DataDirectory()
     {
         try
         {
-            return Path.Combine(ApplicationData.Current.LocalFolder.Path, "logs");
+            return ApplicationData.Current.LocalFolder.Path;
         }
         catch (InvalidOperationException)
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Morph", "logs"); // not packaged (dev)
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Morph"); // not packaged (dev)
         }
     }
 
@@ -199,6 +216,12 @@ public sealed partial class App : Application
             return;
         }
 
+        if (Editors.TryGetValue(ToolId(item), out var editor))
+        {
+            EditAsync(editor(), item, files);
+            return;
+        }
+
         // Merge asks for the page order first; nothing runs if the window is closed.
         if (item.Id == "merge" && files.Paths.Count > 1)
         {
@@ -248,23 +271,53 @@ public sealed partial class App : Application
         Enqueue(item, files);
     }
 
-    /// <param name="parameters">From a settings window; null = the tool's (or ring preset's) defaults.</param>
-    private void Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null)
+    // The editor shell for a drop; nothing runs if it's cancelled. The editor's settings are remembered per tool (ED-6).
+    private async void EditAsync(IEditor editor, WheelItem item, DroppedFiles files)
     {
-        _log.LogInformation("{Tool} parameters: {Parameters}", item.Id,
-            parameters is null ? "defaults" : parameters.ContainsKey("password") ? "(password)" : parameters.ToJsonString()); // never log a password
+        var settings = await _toolSettings!;
+        var tool = ToolId(item);
+        if (await EditorShell.EditAsync(editor, files.Paths, settings.Get(tool), _log) is not { } edited)
+        {
+            _log.LogInformation("{Tool} cancelled", item.Id);
+            return;
+        }
+
+        Enqueue(item, files with { Paths = [.. edited.Files.Select(f => f.Path)] }, perFile: edited.Files.ToDictionary(f => f.Path, f => f.Parameters));
+        try
+        {
+            await settings.SetAsync(tool, edited.Settings, CancellationToken.None);
+        }
+        catch (IOException ex)
+        {
+            _log.LogWarning(ex, "Couldn't save the {Tool} settings", tool);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.LogWarning(ex, "Couldn't save the {Tool} settings", tool);
+        }
+    }
+
+    /// <param name="parameters">From a settings window; null = the tool's (or ring preset's) defaults.</param>
+    /// <param name="perFile">From an editor: each file's own parameters, in place of <paramref name="parameters"/>.</param>
+    private void Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null,
+        IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonObject>? perFile = null)
+    {
+        _log.LogInformation("{Tool} parameters: {Parameters}", item.Id, perFile is not null ? string.Join("; ", perFile.Values.Distinct().Select(p => p.ToJsonString()))
+            : parameters is null ? "defaults" : parameters.ContainsKey("password") ? "(password)" : parameters.ToJsonString()); // never log a password
         // Files already in the target format are skipped. Output goes next to each original; virtual files
         // (Outlook) have no real folder, so they go to Downloads. One job per (engine, folder); a toast only if the drop fails.
-        // Merge makes one file, so it's one job, saved next to the first file.
+        // Merge makes one file, so it's one job, saved next to the first file. Editor parameters split the jobs further
+        // ("Same for all" shares one parameters object, so those files still group together).
         var merge = item.Id == "merge";
         var tool = Matrix.Tool(ToolId(item))!;
         var choice = item.Id.Contains('/', StringComparison.Ordinal) ? item.Id[(item.Id.IndexOf('/', StringComparison.Ordinal) + 1)..] : null;
         var jobs = files.Paths
             .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), tool.Id)))
             .Where(f => f.Row is not null)
-            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!))
+            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!,
+                Edited: perFile?[f.Path]))
             .Select(g => new JobRequest(Guid.NewGuid(), tool.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
-                parameters?.DeepClone().AsObject() ?? tool.ParametersFor(choice)))
+                g.Key.Edited is { } edited ? WithDefaults(tool.ParametersFor(choice), edited) : parameters?.DeepClone().AsObject() ?? tool.ParametersFor(choice)))
             .Select(r => (r, Jobs.Enqueue(r)))
             .ToList();
 
@@ -275,6 +328,18 @@ public sealed partial class App : Application
             _history.Add(tool.Label, files.Paths, jobs);
             _historyWindow?.Refresh();
         }
+    }
+
+    // Editor output goes on top of the tool's defaults.
+    private static System.Text.Json.Nodes.JsonObject WithDefaults(System.Text.Json.Nodes.JsonObject? defaults, System.Text.Json.Nodes.JsonObject edited)
+    {
+        var merged = defaults ?? [];
+        foreach (var (key, value) in edited)
+        {
+            merged[key] = value?.DeepClone();
+        }
+
+        return merged;
     }
 
     private void ShowHistory()

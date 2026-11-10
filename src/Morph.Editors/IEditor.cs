@@ -1,0 +1,32 @@
+using System.Text.Json.Nodes;
+using System.Windows;
+
+namespace Morph.Editors;
+
+/// <summary>
+/// One editor's content inside <see cref="EditorShell"/>. An editor only collects parameters for the job; it never writes files.
+/// The shell calls <see cref="LoadAsync"/> once per file shown, then reads <see cref="Parameters"/> and <see cref="Settings"/> on Done.
+/// </summary>
+public interface IEditor
+{
+    /// <summary>Window title, e.g. "Crop".</summary>
+    string Title { get; }
+
+    FrameworkElement View { get; }
+
+    /// <summary>Shows <paramref name="path"/>. <paramref name="settings"/> are the last ones remembered for this tool (or the previous file's), null the first time.</summary>
+    Task LoadAsync(string path, JsonObject? settings, CancellationToken ct);
+
+    bool CanUndo { get; }
+
+    void Undo();
+
+    /// <summary>Raised when <see cref="CanUndo"/> may have changed.</summary>
+    event EventHandler? Changed;
+
+    /// <summary>The job parameters for the file shown.</summary>
+    JsonObject Parameters();
+
+    /// <summary>What to remember for next time (ED-6), e.g. the aspect chip but not the crop box.</summary>
+    JsonObject Settings();
+}

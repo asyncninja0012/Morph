@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Interop;
 
-using Morph.App.Theme;
 using Morph.Overlay.Theme;
 
 using Windows.Win32;

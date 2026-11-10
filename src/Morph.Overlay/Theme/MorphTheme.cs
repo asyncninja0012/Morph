@@ -1,15 +1,13 @@
 using System.Windows;
 using System.Windows.Media;
 
-using Morph.Overlay.Theme;
-
-namespace Morph.App.Theme;
+namespace Morph.Overlay.Theme;
 
 /// <summary>
-/// Morph glass for the App's Fluent windows (<see cref="MorphGlass"/>): Morph orange in place of the Windows accent,
+/// Morph glass for Fluent windows (App and editors) (<see cref="MorphGlass"/>): Morph orange in place of the Windows accent,
 /// and the surface brushes the XAML uses (MorphSurfaceBrush for the window, MorphCardBrush for rows).
 /// </summary>
-internal static class MorphTheme
+public static class MorphTheme
 {
     public static void Apply(FrameworkElement root, bool dark, bool glass)
     {
