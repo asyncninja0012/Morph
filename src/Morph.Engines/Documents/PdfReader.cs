@@ -17,12 +17,13 @@ namespace Morph.Engines.Documents;
 /// <summary>
 /// Rebuilds a document from a PDF's text (PDF → DOCX beta, CV-5). PdfPig finds words, text blocks and reading order; then
 /// bigger-than-body blocks become headings, lines that start with a bullet or number become list items, all-monospace blocks
-/// become code, and bold, italic and link areas carry over to the words.
+/// become code, and bold, italic and link areas carry over to the words. Pictures go between the blocks at their height on the page.
 /// </summary>
-// shortcut: tables come out as paragraphs (ruled tables: task 2.13), images are dropped (task 2.12), and a scanned PDF has no text (needs OCR, task 2.8).
+// shortcut: tables come out as paragraphs (ruled tables: task 2.13), and a scanned PDF comes out as page pictures without text (needs OCR, task 2.8).
 internal static partial class PdfReader
 {
     private const int MaxPages = 2000; // same limit as the PDF engine
+    private const double MinPicture = 16; // points; smaller pictures are rules, bullets and specks, not content
 
     [GeneratedRegex(@"^(?:([•◦▪▫‣●○■□\-–—*])|(\d{1,3}|[a-zA-Z])[.)])$")]
     private static partial Regex ListMarker();
@@ -62,13 +63,24 @@ internal static partial class PdfReader
     }
 
     /// <param name="Bullet">Left edge of a bullet drawn as a shape (browsers and some editors do), if the line has one.</param>
-    private sealed record Line(IReadOnlyList<Run> Runs, double Size, double Left, bool Mono, TextBlock Block, double? Bullet);
+    /// <param name="Picture">Set on a picture's own line, which has no text and no block.</param>
+    private sealed record Line(IReadOnlyList<Run> Runs, double Size, double Left, bool Mono, TextBlock? Block, double? Bullet, Image? Picture = null);
 
     private static IEnumerable<Line> PageLines(Page page)
     {
+        // Pictures top to bottom; each goes before the first text line (in reading order) below its top, splitting the block there.
+        var pictures = new Queue<(double Top, Image Image)>(page.GetImages()
+            .Where(i => !i.IsImageMask && i.BoundingBox.Width >= MinPicture && i.BoundingBox.Height >= MinPicture)
+            .Select(i => (i.BoundingBox.Top, Image: Picture(i))).Where(p => p.Image is not null).OrderByDescending(p => p.Top)
+            .Select(p => (p.Top, p.Image!)));
         var words = page.GetWords(NearestNeighbourWordExtractor.Instance).Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
         if (words.Count == 0)
         {
+            foreach (var (_, image) in pictures)
+            {
+                yield return new Line([], 0, 0, false, null, null, image);
+            }
+
             yield break;
         }
 
@@ -87,6 +99,11 @@ internal static partial class PdfReader
 
             foreach (var line in block.TextLines)
             {
+                while (pictures.Count > 0 && pictures.Peek().Top > line.BoundingBox.Top)
+                {
+                    yield return new Line([], 0, 0, false, null, null, pictures.Dequeue().Image);
+                }
+
                 var runs = new List<Run>();
                 foreach (var word in line.Words)
                 {
@@ -117,6 +134,27 @@ internal static partial class PdfReader
                     bullet.Width > 0 ? bullet.Left : null);
             }
         }
+
+        foreach (var (_, image) in pictures)
+        {
+            yield return new Line([], 0, 0, false, null, null, image);
+        }
+    }
+
+    // PdfPig decodes Flate and uncompressed pictures to PNG; JPEG and JPEG 2000 bytes go to Magick as they are.
+    private static Image? Picture(IPdfImage image)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = image.TryGetPng(out var png) ? png : image.RawMemory.ToArray();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null; // a picture PdfPig can't decode is left out; the text still converts
+        }
+
+        return bytes.Length <= Pictures.MaxBytes ? Pictures.FromBytes(bytes, "", image.BoundingBox.Width * 96 / 72, image.BoundingBox.Height * 96 / 72) : null;
     }
 
     private static List<Block> Build(List<Line> lines)
@@ -128,14 +166,21 @@ internal static partial class PdfReader
         }
 
         // Body text is the size most characters have; distinctly bigger sizes are headings, the biggest is level 1.
-        var body = lines.GroupBy(l => Math.Round(l.Size, 1)).MaxBy(g => g.Sum(l => Runs.Plain(l.Runs).Length))!.Key;
-        var headingSizes = lines.Select(l => Math.Round(l.Size, 1)).Where(s => s >= body * 1.15).Distinct().OrderDescending().ToList();
+        var textLines = lines.Where(l => l.Picture is null).ToList();
+        var body = textLines.GroupBy(l => Math.Round(l.Size, 1)).MaxBy(g => g.Sum(l => Runs.Plain(l.Runs).Length))?.Key ?? 0;
+        var headingSizes = textLines.Select(l => Math.Round(l.Size, 1)).Where(s => s >= body * 1.15).Distinct().OrderDescending().ToList();
 
         var items = new List<(int Level, bool Ordered, Block Content)>();
         var itemLefts = new List<double>();
-        foreach (var block in lines.GroupBy(l => l.Block))
+        foreach (var blockLines in Blocks(lines))
         {
-            var blockLines = block.ToList();
+            if (blockLines[0].Picture is { } picture)
+            {
+                Flush();
+                result.Add(picture);
+                continue;
+            }
+
             var size = Math.Round(blockLines.Max(l => l.Size), 1);
             if (blockLines.All(l => l.Mono))
             {
@@ -214,6 +259,29 @@ internal static partial class PdfReader
                 items.Clear();
                 itemLefts.Clear();
             }
+        }
+    }
+
+    // A block's lines are next to each other; a picture is a block of its own. Docstrum can lump a short heading in with the
+    // text under it, so a jump in text size starts a new block too.
+    private static IEnumerable<List<Line>> Blocks(List<Line> lines)
+    {
+        var block = new List<Line>();
+        foreach (var line in lines)
+        {
+            if (block.Count > 0 && (line.Picture is not null || block[0].Picture is not null || line.Block != block[0].Block
+                || Math.Abs(line.Size - block[^1].Size) > Math.Min(line.Size, block[^1].Size) * 0.15))
+            {
+                yield return block;
+                block = [];
+            }
+
+            block.Add(line);
+        }
+
+        if (block.Count > 0)
+        {
+            yield return block;
         }
     }
 

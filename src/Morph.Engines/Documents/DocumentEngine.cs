@@ -6,7 +6,7 @@ using Morph.Core.Jobs;
 namespace Morph.Engines.Documents;
 
 /// <summary>
-/// DOCX, Markdown, HTML and TXT among each other and to PDF, and PDF to DOCX as a beta (CV-2, CV-5, tasks 2.3-2.5). Every input is read into the <see cref="Block"/>
+/// DOCX, Markdown, HTML and TXT among each other and to PDF, pictures included (task 2.12), and PDF to DOCX as a beta (CV-2, CV-5, tasks 2.3-2.5). Every input is read into the <see cref="Block"/>
 /// tree (Doc.cs), then written out; PDF is the HTML page printed by WebView2, or Word's own export for DOCX when Word is installed.
 /// Tool ids: convert.docx/md/html/txt/pdf.
 /// </summary>
@@ -29,8 +29,9 @@ public sealed class DocumentEngine : IEngine
         {
             ct.ThrowIfCancellationRequested();
             var input = job.Inputs[i];
+            var pictures = 0;
             var blocks = await ReadAsync(input, ct).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(Runs.Plain(blocks)))
+            if (string.IsNullOrWhiteSpace(Runs.Plain(blocks)) && (target == "txt" || !HasPicture(blocks)))
             {
                 throw new EngineException($"{Path.GetFileName(input)} has no text to convert.");
             }
@@ -55,7 +56,7 @@ public sealed class DocumentEngine : IEngine
             {
                 var text = target switch
                 {
-                    "md" => MarkdownWriter.Write(blocks),
+                    "md" => MarkdownWriter.Write(blocks, SavePicture),
                     "html" => HtmlWriter.Write(blocks, Path.GetFileNameWithoutExtension(input)),
                     _ => PlainTextWriter.Write(blocks),
                 };
@@ -63,8 +64,18 @@ public sealed class DocumentEngine : IEngine
             }
 
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+
+            // Markdown can't hold pictures: each goes next to the output as report-1.png, report-2.jpg, ...
+            string SavePicture(Image image)
+            {
+                var path = namer.Reserve(input, image.Format == "jpeg" ? ".jpg" : "." + image.Format, $"-{++pictures}").Path;
+                File.WriteAllBytes(path, image.Bytes);
+                return Path.GetFileName(path);
+            }
         }
     }
+
+    private static bool HasPicture(IEnumerable<Block> blocks) => blocks.Any(b => b is Image || (b is ListBlock l && l.Items.Any(HasPicture)));
 
     internal static async Task<List<Block>> ReadAsync(string input, CancellationToken ct)
     {
@@ -97,8 +108,8 @@ public sealed class DocumentEngine : IEngine
         var text = (await File.ReadAllTextAsync(input, ct).ConfigureAwait(false)).ReplaceLineEndings("\n");
         return format switch
         {
-            "md" => MarkdownReader.Read(text),
-            "html" => HtmlReader.Read(text),
+            "md" => MarkdownReader.Read(text, Path.GetDirectoryName(Path.GetFullPath(input))),
+            "html" => HtmlReader.Read(text, Path.GetDirectoryName(Path.GetFullPath(input))),
             "txt" => PlainTextReader.Read(text),
             _ => throw new EngineException($"{name} isn't a document Morph can convert.", $"document: input format {format}"),
         };

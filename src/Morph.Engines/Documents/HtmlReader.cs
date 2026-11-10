@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 
@@ -5,7 +6,7 @@ namespace Morph.Engines.Documents;
 
 /// <summary>
 /// HTML → <see cref="Block"/>s. A forgiving tag scanner, not a browser parser: it reads headings, paragraphs, lists, tables,
-/// pre/code, bold/italic and links, keeps the text of everything else, and drops scripts and styles.
+/// pre/code, bold/italic, links and images (data: URIs and files next to the page, <see cref="Pictures.FromSource"/>), keeps the text of everything else, and drops scripts and styles.
 /// </summary>
 internal sealed partial class HtmlReader
 {
@@ -22,17 +23,17 @@ internal sealed partial class HtmlReader
     private readonly Stack<(bool Ordered, List<List<Block>> Items, List<Block> Target)> _lists = new();
     private readonly Stack<(List<List<List<Run>>> Rows, List<Block> Target)> _tables = new();
     private readonly Stack<string?> _links = new();
+    private readonly string? _folder;
     private List<Run>? _cell;
     private int _heading, _bold, _italic, _code;
     private bool _pre;
 
-    private HtmlReader()
-    {
-    }
+    private HtmlReader(string? folder) => _folder = folder;
 
-    public static List<Block> Read(string html)
+    /// <param name="folder">The page's folder, for images given as relative paths; null reads only data: images.</param>
+    public static List<Block> Read(string html, string? folder = null)
     {
-        var reader = new HtmlReader();
+        var reader = new HtmlReader(folder);
         reader.Scan(html);
         return reader._root;
     }
@@ -40,8 +41,17 @@ internal sealed partial class HtmlReader
     [GeneratedRegex("""<!--.*?-->|<![^>]*>|<\?[^>]*>|<(/?)([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>""", RegexOptions.Singleline)]
     private static partial Regex Tag();
 
-    [GeneratedRegex("""\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOptions.IgnoreCase)]
-    private static partial Regex Href();
+    [GeneratedRegex("""(?:^|\s)([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")]
+    private static partial Regex Attribute();
+
+    private static string? Attr(string attributes, string name) => Attribute().Matches(attributes)
+        .Where(m => m.Groups[1].Value.Equals(name, StringComparison.OrdinalIgnoreCase))
+        .Select(m => WebUtility.HtmlDecode(m.Groups[2].Value + m.Groups[3].Value + m.Groups[4].Value))
+        .FirstOrDefault();
+
+    // width="300" or width="300px"; percentages and other units fall back to the picture's own size.
+    private static double Pixels(string attributes, string name) =>
+        double.TryParse(Attr(attributes, name)?.Trim().Replace("px", "", StringComparison.OrdinalIgnoreCase), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0 ? v : 0;
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Space();
@@ -123,8 +133,16 @@ internal sealed partial class HtmlReader
                 _code++;
                 break;
             case "a":
-                var href = Href().Match(attributes);
-                _links.Push(href.Success ? WebUtility.HtmlDecode(href.Groups[1].Value + href.Groups[2].Value + href.Groups[3].Value) : null);
+                _links.Push(Attr(attributes, "href"));
+                break;
+            case "img" when _cell is null: // shortcut: an image inside a table cell is dropped (cells hold text runs only)
+                if (Attr(attributes, "src") is { } src
+                    && Pictures.FromSource(src, _folder, Attr(attributes, "alt") ?? "", Pixels(attributes, "width"), Pixels(attributes, "height")) is { } image)
+                {
+                    Flush();
+                    Target().Add(image);
+                }
+
                 break;
             case "ul" or "ol":
                 Flush();

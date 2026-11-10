@@ -3,13 +3,16 @@ using System.Text;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 
+using A = DocumentFormat.OpenXml.Drawing;
 using W = DocumentFormat.OpenXml.Wordprocessing;
+using Wp = DocumentFormat.OpenXml.Drawing.Wordprocessing;
 
 namespace Morph.Engines.Documents;
 
 /// <summary>
 /// DOCX → <see cref="Block"/>s with the Open XML SDK. Headings come from "Heading N"/"Title" styles, lists from numbering,
-/// code from styles or fonts named like code. Deleted tracked changes are skipped; inserted ones are kept.
+/// code from styles or fonts named like code, pictures (DrawingML) after the paragraph that holds them. Deleted tracked changes
+/// are skipped; inserted ones are kept.
 /// </summary>
 internal sealed class DocxReader
 {
@@ -79,7 +82,48 @@ internal sealed class DocxReader
         return Runs.Normalize(runs);
     }
 
+    private const double EmuPerPixel = 9525; // 914400 EMU per inch, 96 px per inch
+
     private void Paragraph(W.Paragraph p)
+    {
+        Text(p);
+
+        // shortcut: old VML pictures (w:pict) and pictures in table cells are dropped; DrawingML covers Word 2007 and later.
+        var images = p.Descendants<W.Drawing>().Select(Picture).OfType<Image>().ToList();
+        if (images.Count > 0)
+        {
+            FlushPending();
+            _blocks.AddRange(images);
+        }
+    }
+
+    private Image? Picture(W.Drawing drawing)
+    {
+        if (drawing.Descendants<A.Blip>().FirstOrDefault()?.Embed?.Value is not { } id
+            || !_main.TryGetPartById(id, out var part) || part is not ImagePart image)
+        {
+            return null;
+        }
+
+        byte[] bytes;
+        using (var stream = image.GetStream(FileMode.Open, FileAccess.Read))
+        using (var memory = new MemoryStream())
+        {
+            if (stream.Length > Pictures.MaxBytes)
+            {
+                return null;
+            }
+
+            stream.CopyTo(memory);
+            bytes = memory.ToArray();
+        }
+
+        var extent = drawing.Descendants<Wp.Extent>().FirstOrDefault();
+        var docPr = drawing.Descendants<Wp.DocProperties>().FirstOrDefault();
+        return Pictures.FromBytes(bytes, docPr?.Description?.Value ?? "", (extent?.Cx?.Value ?? 0) / EmuPerPixel, (extent?.Cy?.Value ?? 0) / EmuPerPixel);
+    }
+
+    private void Text(W.Paragraph p)
     {
         var style = Style(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value);
         var name = Name(style);

@@ -142,6 +142,7 @@ public sealed class DocumentEngineTests : IDisposable
     {
         Heading h => $"H{h.Level} {Dump(h.Runs)}",
         Paragraph p => $"P {Dump(p.Runs)}",
+        Image i => $"IMG {i.Format} {i.Width}x{i.Height} {i.Alt}",
         ListBlock l => (l.Ordered ? "OL[" : "UL[") + string.Join("; ", l.Items.Select(i => string.Join(" ", i.Select(b => b is Paragraph p ? Dump(p.Runs) : Dump(b))))) + "]",
         _ => block.GetType().Name,
     };
@@ -151,7 +152,60 @@ public sealed class DocumentEngineTests : IDisposable
         r.Link is { } link ? $"[{r.Text}:{link}]" : r.Bold ? $"[b:{r.Text}]" : r.Italic ? $"[i:{r.Text}]" : r.Code ? $"[c:{r.Text}]" : r.Text));
 
     [Fact]
-    public async Task Pdf_without_text_fails_with_a_user_message()
+    public async Task Pictures_travel_from_markdown_through_docx_html_and_pdf_and_back()
+    {
+        await WritePngAsync(Path.Combine(_dir, "photo.png"), 80, 40);
+        var docx = await ConvertAsync("pics.md", "# Pictures\n\nBefore.\n\n![A red box](photo.png)\n\nThe end.\n", "docx");
+
+        using (var document = WordprocessingDocument.Open(docx, isEditable: false))
+        {
+            var errors = new OpenXmlValidator().Validate(document, TestContext.Current.CancellationToken).Select(e => $"{e.Path?.XPath}: {e.Description}");
+            Assert.True(!errors.Any(), string.Join(" | ", errors));
+        }
+
+        static string Dumped(List<Block> blocks) => string.Join("\n", blocks.Select(Dump));
+        const string Expected = "H1 Pictures\nP Before.\nIMG png 80x40 A red box\nP The end.";
+        Assert.Equal(Expected, Dumped(await DocumentEngine.ReadAsync(docx, TestContext.Current.CancellationToken)));
+
+        // DOCX → HTML keeps the picture inline as a data: URI, and reading that back gives the same picture.
+        var html = await ConvertFileAsync(docx, "html");
+        Assert.Contains("src=\"data:image/png;base64,", await File.ReadAllTextAsync(html, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(Expected, Dumped(await DocumentEngine.ReadAsync(html, TestContext.Current.CancellationToken)));
+
+        // HTML → PDF (WebView2) → DOCX finds the picture between the paragraphs it sat between.
+        var pdf = await ConvertFileAsync(html, "pdf");
+        var fromPdf = (await DocumentEngine.ReadAsync(pdf, TestContext.Current.CancellationToken)).Select(Dump).ToList();
+        Assert.True(fromPdf.Count == 4, string.Join(" | ", fromPdf));
+        Assert.Equal(["H1 Pictures", "P Before."], fromPdf[..2]);
+        Assert.StartsWith("IMG ", fromPdf[2], StringComparison.Ordinal);
+        Assert.Equal("P The end.", fromPdf[3]);
+
+        // DOCX → Markdown saves the picture next to the output and links it.
+        var markdown = await ConvertFileAsync(docx, "md", expectedOutputs: 2);
+        Assert.Contains("![A red box](<pics-1.png>)", await File.ReadAllTextAsync(markdown, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(_dir, "pics-1.png")));
+    }
+
+    [Fact]
+    public async Task Html_pictures_load_only_from_data_uris_and_the_pages_own_folder()
+    {
+        var page = Directory.CreateDirectory(Path.Combine(_dir, "page")).FullName;
+        Directory.CreateDirectory(Path.Combine(page, "img"));
+        await WritePngAsync(Path.Combine(page, "img", "in folder.png"), 10, 10);
+        await WritePngAsync(Path.Combine(_dir, "outside.png"), 10, 10);
+        var data = Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Combine(_dir, "outside.png"), TestContext.Current.CancellationToken));
+
+        var blocks = HtmlReader.Read($"""
+            <img src="img/in%20folder.png" width="30">
+            <img src="data:image/png;base64,{data}" alt="inline">
+            <img src="../outside.png"><img src="{Path.Combine(_dir, "outside.png")}"><img src="https://x.test/a.png"><img src="data:image/png;base64,!!">
+            """, page);
+
+        Assert.Equal(["IMG png 30x30 ", "IMG png 10x10 inline"], blocks.Select(Dump));
+    }
+
+    [Fact]
+    public async Task Scanned_pdf_converts_to_its_page_pictures()
     {
         var input = Path.Combine(_dir, "scan.pdf");
         var png = Path.Combine(_dir, "scan.png");
@@ -165,11 +219,24 @@ public sealed class DocumentEngineTests : IDisposable
             TestContext.Current.CancellationToken);
         File.Move(Assert.Single(namer.CommitAll()), input);
 
-        var ex = await Assert.ThrowsAsync<EngineException>(() => new DocumentEngine().RunAsync(
-            new JobRequest(Guid.NewGuid(), "convert.docx", "document", [input], _dir), new OutputNamer(_dir), new Progress<JobProgress>(),
-            TestContext.Current.CancellationToken));
+        var picture = Assert.IsType<Image>(Assert.Single(await DocumentEngine.ReadAsync(input, TestContext.Current.CancellationToken)));
+        Assert.Equal("png", picture.Format);
+    }
 
-        Assert.Equal("scan.pdf has no text to convert.", ex.UserMessage);
+    private static async Task WritePngAsync(string path, uint width, uint height)
+    {
+        using var image = new ImageMagick.MagickImage(ImageMagick.MagickColors.Red, width, height);
+        await image.WriteAsync(path, ImageMagick.MagickFormat.Png, TestContext.Current.CancellationToken);
+    }
+
+    private async Task<string> ConvertFileAsync(string input, string to, int expectedOutputs = 1)
+    {
+        var namer = new OutputNamer(_dir);
+        await new DocumentEngine().RunAsync(new JobRequest(Guid.NewGuid(), $"convert.{to}", "document", [input], _dir), namer,
+            new Progress<JobProgress>(), TestContext.Current.CancellationToken);
+        var outputs = namer.CommitAll();
+        Assert.Equal(expectedOutputs, outputs.Count);
+        return outputs.Single(o => Path.GetExtension(o) == "." + to);
     }
 
     private async Task<string> ConvertAsync(string name, string content, string to)

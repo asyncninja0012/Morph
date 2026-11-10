@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security;
 using System.Text;
 
 using DocumentFormat.OpenXml;
@@ -15,9 +16,12 @@ namespace Morph.Engines.Documents;
 internal sealed class DocxWriter
 {
     private const int Indent = 720; // twips: half an inch per list level
+    private const long EmuPerPixel = 9525; // 914400 EMU per inch, 96 px per inch
+    private const int MaxPictureWidth = 576; // px: 6 in, inside the default page's margins
 
     private readonly MainDocumentPart _main;
     private readonly List<(int Id, bool Ordered, int Level)> _lists = [];
+    private int _pictures;
 
     private DocxWriter(MainDocumentPart main) => _main = main;
 
@@ -47,8 +51,28 @@ internal sealed class DocxWriter
         ListBlock l => List(l, depth),
         Table t => [TableElement(t)],
         CodeBlock c => c.Text.TrimEnd('\n').Split('\n').Select(line => Para(Inlines([new Run(line)]), "SourceCode", indent: depth * Indent)),
+        Image i => [Para([new W.Run(Picture(i))], null, indent: depth * Indent)],
         _ => [],
     };
+
+    // An inline picture, embedded in the package and scaled down to the text width.
+    private W.Drawing Picture(Image image)
+    {
+        var part = _main.AddImagePart(image.Format switch { "jpeg" => ImagePartType.Jpeg, "gif" => ImagePartType.Gif, _ => ImagePartType.Png });
+        using (var stream = new MemoryStream(image.Bytes))
+        {
+            part.FeedData(stream);
+        }
+
+        var scale = Math.Min(1.0, (double)MaxPictureWidth / image.Width);
+        var cx = (long)(image.Width * scale * EmuPerPixel);
+        var cy = (long)(image.Height * scale * EmuPerPixel);
+        var id = ++_pictures;
+        var alt = SecurityElement.Escape(new string([.. image.Alt.Where(c => !char.IsControl(c))])); // alt text comes from the input file
+        return new W.Drawing($"""
+            <w:drawing xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/><wp:docPr id="{id}" name="Picture {id}" descr="{alt}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="{id}" name="Picture {id}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="{_main.GetIdOfPart(part)}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>
+            """.Trim());
+    }
 
     // Each list gets its own numbering instance, so an ordered list starts again at 1.
     private IEnumerable<OpenXmlElement> List(ListBlock list, int depth)

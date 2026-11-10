@@ -8,7 +8,7 @@ namespace Morph.Engines.Documents;
 internal static class PlainTextWriter
 {
     public static string Write(IReadOnlyList<Block> blocks) =>
-        string.Join("\n\n", blocks.Select(b => Block(b, ""))).ReplaceLineEndings("\r\n") + "\r\n";
+        string.Join("\n\n", blocks.Where(b => b is not Image).Select(b => Block(b, ""))).ReplaceLineEndings("\r\n") + "\r\n";
 
     private static string Block(Block block, string indent) => block switch
     {
@@ -24,32 +24,35 @@ internal static class PlainTextWriter
         indent + marker + string.Join("\n", item.Select((b, i) => i == 0 ? Block(b, indent + "   ") : b is ListBlock ? Block(b, indent + "   ") : indent + "   " + Block(b, indent + "   ")));
 }
 
-/// <summary>Markdown (CommonMark + GitHub pipe tables).</summary>
+/// <summary>Markdown (CommonMark + GitHub pipe tables). Pictures are separate files the text links to.</summary>
 internal static partial class MarkdownWriter
 {
-    public static string Write(IReadOnlyList<Block> blocks) => string.Join("\n\n", blocks.Select(b => Block(b))) + "\n";
+    /// <param name="save">Writes a picture next to the output and returns its file name; without it pictures become their alt text.</param>
+    public static string Write(IReadOnlyList<Block> blocks, Func<Image, string>? save = null) =>
+        string.Join("\n\n", blocks.Select(b => Block(b, save))) + "\n";
 
     [GeneratedRegex(@"^(\s*)(?:([#>+\-=])|(\d+)([.)]))")]
     private static partial Regex LineStart();
 
-    private static string Block(Block block) => block switch
+    private static string Block(Block block, Func<Image, string>? save) => block switch
     {
         Heading h => new string('#', Math.Clamp(h.Level, 1, 6)) + " " + Inline(h.Runs).Replace("\\\n", " ", StringComparison.Ordinal),
         Paragraph p => Inline(p.Runs),
-        ListBlock l => string.Join("\n", l.Items.Select((item, i) => Item(item, l.Ordered ? $"{i + 1}. " : "- "))),
+        ListBlock l => string.Join("\n", l.Items.Select((item, i) => Item(item, l.Ordered ? $"{i + 1}. " : "- ", save))),
         Table t => Table(t),
         CodeBlock c => Fence(c.Text) + "\n" + c.Text.TrimEnd('\n') + "\n" + Fence(c.Text),
+        Image i => save is null ? Escape(i.Alt) : $"![{Escape(i.Alt)}](<{save(i).Replace(">", "%3E", StringComparison.Ordinal)}>)",
         _ => "",
     };
 
     // Continuation lines and nested lists are indented to the item's text, so they stay inside the item.
-    private static string Item(IReadOnlyList<Block> item, string marker)
+    private static string Item(IReadOnlyList<Block> item, string marker, Func<Image, string>? save)
     {
         var pad = new string(' ', marker.Length);
         var body = new StringBuilder();
         for (var i = 0; i < item.Count; i++)
         {
-            body.Append(i == 0 ? "" : item[i] is ListBlock ? "\n" : "\n\n").Append(Block(item[i])); // a nested list stays tight
+            body.Append(i == 0 ? "" : item[i] is ListBlock ? "\n" : "\n\n").Append(Block(item[i], save)); // a nested list stays tight
         }
 
         return marker + body.ToString().Replace("\n", "\n" + pad, StringComparison.Ordinal).Replace("\n" + pad + "\n", "\n\n", StringComparison.Ordinal);
@@ -136,6 +139,7 @@ internal static class HtmlWriter
     private const string Style = "body{font-family:'Segoe UI',system-ui,sans-serif;line-height:1.5;max-width:46em;margin:2em auto;padding:0 1em}"
         + "table{border-collapse:collapse}th,td{border:1px solid #bbb;padding:.3em .6em;text-align:left}"
         + "pre{background:#f4f4f4;padding:.8em;overflow:auto;white-space:pre-wrap}code{font-family:Consolas,monospace}"
+        + "img{max-width:100%;height:auto}"
         + "@media print{body{max-width:none;margin:0;padding:0}}";
 
     public static string Write(IReadOnlyList<Block> blocks, string title) =>
@@ -154,6 +158,7 @@ internal static class HtmlWriter
             + string.Concat(t.Rows.Select((r, i) => "<tr>" + string.Concat(r.Select(c => i == 0 ? $"<th>{Inline(c)}</th>" : $"<td>{Inline(c)}</td>")) + "</tr>\n"))
             + "</table>",
         CodeBlock c => $"<pre><code>{WebUtility.HtmlEncode(c.Text)}</code></pre>",
+        Image i => $"<p><img src=\"data:image/{i.Format};base64,{Convert.ToBase64String(i.Bytes)}\" alt=\"{WebUtility.HtmlEncode(i.Alt)}\" width=\"{i.Width}\" height=\"{i.Height}\"></p>",
         _ => "",
     };
 
