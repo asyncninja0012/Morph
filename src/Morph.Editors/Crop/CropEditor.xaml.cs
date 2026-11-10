@@ -12,9 +12,6 @@ using Morph.Overlay;
 
 namespace Morph.Editors.Crop;
 
-/// <summary>Gets the Worker's preview of a file (the App never decodes dropped files itself).</summary>
-public delegate Task<PreviewImage> PreviewLoader(string path, CancellationToken ct);
-
 /// <summary>
 /// Crop (ED-1) for images, video (one frame) and PDF (page 1; the box applies to every page): drag the handles or the box,
 /// or draw a new one; shape chips; size readout. Keyboard: arrows move the box, Shift+arrows resize it.
@@ -93,7 +90,7 @@ public sealed partial class CropEditor : UserControl, IEditor
 
     public async Task LoadAsync(string path, JsonObject? settings, CancellationToken ct)
     {
-        var preview = await _load(path, ct);
+        var preview = await _load(path, 1, ct);
         var bitmap = BitmapSource.Create(preview.Width, preview.Height, 96, 96, PixelFormats.Bgra32, null, preview.Bgra, preview.Width * 4);
         bitmap.Freeze();
         Picture.Source = bitmap;

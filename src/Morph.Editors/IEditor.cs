@@ -1,7 +1,12 @@
 using System.Text.Json.Nodes;
 using System.Windows;
 
+using Morph.Core.Jobs;
+
 namespace Morph.Editors;
+
+/// <summary>Gets the Worker's preview of a file's <paramref name="page"/> (1-based; PDF only), so the App never decodes dropped files itself.</summary>
+public delegate Task<PreviewImage> PreviewLoader(string path, int page, CancellationToken ct);
 
 /// <summary>
 /// One editor's content inside <see cref="EditorShell"/>. An editor only collects parameters for the job; it never writes files.

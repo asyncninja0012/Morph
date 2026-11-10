@@ -8,11 +8,11 @@ namespace Morph.Engines;
 
 /// <summary>
 /// The "preview" job (ED-1..3): a downscaled picture of the file for an editor, written as a <see cref="PreviewFile"/>
-/// into the job's (App temp) folder. Parameters: { "maxEdge": 2048 }.
+/// into the job's (App temp) folder. Parameters: { "maxEdge": 2048, "page": 1 } (page: PDF only, 1-based).
 /// </summary>
 internal static class Preview
 {
-    public static async Task WriteAsync(MagickImage image, double sourceWidth, double sourceHeight, JobRequest job, OutputNamer namer, CancellationToken ct)
+    public static async Task WriteAsync(MagickImage image, double sourceWidth, double sourceHeight, JobRequest job, OutputNamer namer, CancellationToken ct, int pages = 1)
     {
         var maxEdge = (uint)Math.Clamp(job.Parameters?["maxEdge"]?.GetValue<int>() ?? 2048, 64, PreviewFile.MaxEdge);
         if (image.Width > maxEdge || image.Height > maxEdge)
@@ -28,6 +28,6 @@ internal static class Preview
         using var pixels = image.GetPixelsUnsafe();
         var bgra = pixels.ToByteArray(PixelMapping.BGRA) ?? throw new InvalidOperationException("Magick gave no pixels.");
         var pending = namer.Reserve(job.Inputs[0], ".preview");
-        await PreviewFile.WriteAsync(pending.Path, new PreviewImage((int)image.Width, (int)image.Height, sourceWidth, sourceHeight, bgra), ct).ConfigureAwait(false);
+        await PreviewFile.WriteAsync(pending.Path, new PreviewImage((int)image.Width, (int)image.Height, sourceWidth, sourceHeight, bgra, pages), ct).ConfigureAwait(false);
     }
 }

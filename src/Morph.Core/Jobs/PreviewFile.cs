@@ -5,11 +5,12 @@ namespace Morph.Core.Jobs;
 /// <summary>A downscaled picture of a file for an editor, made by the Worker.</summary>
 /// <param name="Bgra">Width × Height pixels, 4 bytes each (blue, green, red, straight alpha), rows top to bottom.</param>
 /// <param name="SourceWidth">The file's own width in the unit editors return: pixels for images and video, points for PDF pages.</param>
-public sealed record PreviewImage(int Width, int Height, double SourceWidth, double SourceHeight, byte[] Bgra);
+/// <param name="Pages">How many pages the file has (PDF); 1 for everything else.</param>
+public sealed record PreviewImage(int Width, int Height, double SourceWidth, double SourceHeight, byte[] Bgra, int Pages = 1);
 
 /// <summary>
-/// The Worker → App preview format: raw pixels behind a 28-byte header, so the App shows a dropped file without decoding it
-/// (untrusted input is parsed only in the Worker). Header: "MPV1", width, height (int32 LE), source width, height (double LE).
+/// The Worker → App preview format: raw pixels behind a 32-byte header, so the App shows a dropped file without decoding it
+/// (untrusted input is parsed only in the Worker). Header: "MPV2", width, height (int32 LE), source width, height (double LE), pages (int32 LE).
 /// </summary>
 public static class PreviewFile
 {
@@ -18,8 +19,8 @@ public static class PreviewFile
 
     public const string ToolId = "preview";
 
-    private const int HeaderSize = 28;
-    private static ReadOnlySpan<byte> Magic => "MPV1"u8;
+    private const int HeaderSize = 32;
+    private static ReadOnlySpan<byte> Magic => "MPV2"u8;
 
     public static async Task WriteAsync(string path, PreviewImage preview, CancellationToken ct)
     {
@@ -29,6 +30,7 @@ public static class PreviewFile
         BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(8), preview.Height);
         BinaryPrimitives.WriteDoubleLittleEndian(header.AsSpan(12), preview.SourceWidth);
         BinaryPrimitives.WriteDoubleLittleEndian(header.AsSpan(20), preview.SourceHeight);
+        BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(28), preview.Pages);
         await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
         await file.WriteAsync(header, ct).ConfigureAwait(false);
         await file.WriteAsync(preview.Bgra, ct).ConfigureAwait(false);
@@ -47,12 +49,13 @@ public static class PreviewFile
         var height = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(8));
         var sourceWidth = BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(12));
         var sourceHeight = BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(20));
+        var pages = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(28));
         if (width is < 1 or > MaxEdge || height is < 1 or > MaxEdge || bytes.Length != HeaderSize + (long)width * height * 4
-            || !double.IsFinite(sourceWidth) || !double.IsFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0)
+            || !double.IsFinite(sourceWidth) || !double.IsFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0 || pages < 1)
         {
-            throw new InvalidDataException($"Bad preview header: {width}x{height}, source {sourceWidth}x{sourceHeight}, {bytes.Length} bytes.");
+            throw new InvalidDataException($"Bad preview header: {width}x{height}, source {sourceWidth}x{sourceHeight}, {pages} pages, {bytes.Length} bytes.");
         }
 
-        return new PreviewImage(width, height, sourceWidth, sourceHeight, bytes[HeaderSize..]);
+        return new PreviewImage(width, height, sourceWidth, sourceHeight, bytes[HeaderSize..], pages);
     }
 }

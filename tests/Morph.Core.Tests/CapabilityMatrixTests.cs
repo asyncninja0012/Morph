@@ -57,15 +57,15 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void Merge_needs_two_files_it_can_join()
     {
-        Assert.Equal(["compress", "crop", "strip-metadata", "ocr", "protect", "unlock"], Ids([FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["compress", "crop", "annotate", "strip-metadata", "ocr", "protect", "unlock"], Ids([FileFormat.Pdf], WheelGroup.Tools));
         Assert.Equal(["protect", "unlock"], Ids([FileFormat.Zip], WheelGroup.Tools));
         Assert.Equal(["protect", "unlock"], Ids([FileFormat.Zip, FileFormat.Pdf], WheelGroup.Tools));
-        Assert.Equal(["compress", "crop", "strip-metadata", "ocr", "protect", "unlock", "merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
+        Assert.Equal(["compress", "crop", "annotate", "strip-metadata", "ocr", "protect", "unlock", "merge"], Ids([FileFormat.Pdf, FileFormat.Pdf], WheelGroup.Tools));
         Assert.Equal(["ocr", "merge"], Ids([FileFormat.Heic, FileFormat.Pdf, FileFormat.Png], WheelGroup.Tools));
         Assert.Equal(["compress", "crop"], Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
         Assert.Contains("merge", Ids([FileFormat.Mp4, FileFormat.Mov], WheelGroup.Tools));
         Assert.Contains("merge", Ids([FileFormat.Mp3, FileFormat.Wav], WheelGroup.Tools));
-        Assert.Equal(["compress", "resize", "rotate", "crop", "strip-metadata", "ocr", "extract-audio", "mute", "make-gif", "protect", "unlock", "merge"], Ids([], WheelGroup.Tools));
+        Assert.Equal(["compress", "resize", "rotate", "crop", "annotate", "strip-metadata", "ocr", "extract-audio", "mute", "make-gif", "protect", "unlock", "merge"], Ids([], WheelGroup.Tools));
     }
 
     [Fact]

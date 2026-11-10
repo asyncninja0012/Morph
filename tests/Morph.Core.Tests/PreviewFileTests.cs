@@ -12,12 +12,12 @@ public sealed class PreviewFileTests : IDisposable
     public async Task A_preview_round_trips()
     {
         var path = Path.Combine(_folder, "a.preview");
-        var preview = new PreviewImage(2, 1, 595.5, 842, [1, 2, 3, 255, 4, 5, 6, 128]);
+        var preview = new PreviewImage(2, 1, 595.5, 842, [1, 2, 3, 255, 4, 5, 6, 128], 12);
 
         await PreviewFile.WriteAsync(path, preview, TestContext.Current.CancellationToken);
         var read = await PreviewFile.ReadAsync(path, TestContext.Current.CancellationToken);
 
-        Assert.Equal((2, 1, 595.5, 842.0), (read.Width, read.Height, read.SourceWidth, read.SourceHeight));
+        Assert.Equal((2, 1, 595.5, 842.0, 12), (read.Width, read.Height, read.SourceWidth, read.SourceHeight, read.Pages));
         Assert.Equal(preview.Bgra, read.Bgra);
     }
 

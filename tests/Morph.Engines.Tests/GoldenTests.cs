@@ -416,6 +416,87 @@ public sealed class GoldenTests : IDisposable
         Assert.Equal([input], Directory.GetFiles(_dir));
     }
 
+    public static TheoryData<string, string> AnnotateRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "annotate"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-2: every kind of mark is drawn where the editor put it, in its colour (green: nothing in the fixtures is green). Pictures:
+    // a box edge at x 20, text near 75,62 and pixelate over the top of the blue circle; PDF (pixelate isn't offered): the same
+    // box on both pages (page 5 doesn't exist and is skipped), rendered at 150 DPI.
+    [Theory]
+    [MemberData(nameof(AnnotateRows))]
+    public async Task Annotate_row_draws_the_marks(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+        var pdf = engine == "pdf";
+        const string Green = "#2FB344";
+        List<AnnotationShape> shapes =
+        [
+            new("rect", [(20, 70), (60, 100)], Green, 6),
+            new("arrow", [(30, 110), (60, 80)], Green, 2),
+            new("highlight", [(100, 10), (120, 12), (140, 10)], "#FFD60A", 3),
+            new("text", [(75, 62)], Green, 4, "Hi"),
+        ];
+        if (pdf)
+        {
+            shapes.Add(new("rect", [(20, 70), (60, 100)], Green, 6, Page: 2));
+            shapes.Add(new("rect", [(20, 70), (60, 100)], Green, 6, Page: 5));
+            var second = await PreviewFile.ReadAsync(Assert.Single((await RunAsync(PreviewFile.ToolId, engine, [input], ct, new() { ["maxEdge"] = 64, ["page"] = 2 })).Outputs), ct);
+            Assert.Equal(2, second.Pages);
+        }
+        else
+        {
+            shapes.Add(new("pixelate", [(90, 40), (140, 100)], Green, 1));
+        }
+
+        var output = Assert.Single((await RunAsync("annotate", engine, [input], ct, Annotations.ToParameters(shapes))).Outputs);
+        Assert.Equal(Path.GetFileNameWithoutExtension(input) + "-annotated", Path.GetFileNameWithoutExtension(output));
+        static bool IsGreen(IMagickColor<byte> c) => c.G > 140 && c.R < 110 && c.B < 120;
+        var images = pdf ? (await RenderAsync(output, ct)).Select(p => new MagickImage(p)).ToList() : [new MagickImage(output)];
+        try
+        {
+            Assert.Equal(pdf ? 2 : 1, images.Count);
+            var scale = pdf ? 150.0 / 72 : 1;
+            foreach (var image in images)
+            {
+                var pixels = image.GetPixels();
+                Assert.True(IsGreen(pixels.GetPixel((int)(20 * scale), (int)(85 * scale))!.ToColor()!), $"no box edge on {from}");
+            }
+
+            var first = images[0].GetPixels();
+            var text = 0;
+            for (var x = (int)(75 * scale); x < (int)(100 * scale); x++)
+            {
+                for (var y = (int)(62 * scale); y < (int)(90 * scale); y++)
+                {
+                    text += IsGreen(first.GetPixel(x, y)!.ToColor()!) ? 1 : 0;
+                }
+            }
+
+            Assert.True(text > 10, $"no text on {from}");
+            if (from is "png" or "bmp" or "tiff")
+            {
+                // The circle's top edge (white above y 50, blue below) falls inside one pixel cell.
+                Assert.Equal(first.GetPixel(115, 47)!.ToColor()!.ToString(), first.GetPixel(115, 51)!.ToColor()!.ToString());
+            }
+        }
+        finally
+        {
+            images.ForEach(i => i.Dispose());
+        }
+    }
+
     public static TheoryData<string, string> PasswordRows()
     {
         var rows = new TheoryData<string, string>();

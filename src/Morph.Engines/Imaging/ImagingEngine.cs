@@ -9,7 +9,7 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
-/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate, strip-metadata (IT-1..3) and crop (ED-1) keep
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate, strip-metadata (IT-1..3), crop (ED-1) and annotate (ED-2) keep
 /// the format; preview feeds the editors.
 /// </summary>
 public sealed class ImagingEngine : IEngine
@@ -63,7 +63,7 @@ public sealed class ImagingEngine : IEngine
             return;
         }
 
-        if (job.ToolId is "rotate" or "strip-metadata" or "crop")
+        if (job.ToolId is "rotate" or "strip-metadata" or "crop" or "annotate")
         {
             await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
             return;
@@ -178,13 +178,14 @@ public sealed class ImagingEngine : IEngine
         }
     }
 
-    // Rotate turns and crop cuts the upright picture (EXIF orientation already applied, as the crop editor showed it). Strip info drops EXIF (GPS, camera, dates), XMP, IPTC
+    // Rotate turns, crop cuts and annotate draws on the upright picture (EXIF orientation already applied, as the editors showed it). Strip info drops EXIF (GPS, camera, dates), XMP, IPTC
     // and comments but keeps the colour profile. shortcut: lossy formats re-encode (JPEG at the quality Magick reads from the file,
     // WebP/AVIF at Magick's defaults); a lossless JPEG path (jpegtran-style) if users notice.
     private static async Task EditAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
     {
         var rotate = job.ToolId == "rotate";
         var (degrees, flip) = Presets.Rotate(job.Parameters);
+        var shapes = job.ToolId == "annotate" ? Annotations.Parse(job.Parameters) : [];
         string? skipped = null;
         var made = 0;
         for (var i = 0; i < job.Inputs.Count; i++)
@@ -205,6 +206,14 @@ public sealed class ImagingEngine : IEngine
 
                 image.Crop(box);
                 image.ResetPage();
+            }
+            else if (job.ToolId == "annotate")
+            {
+                if (!ImageAnnotate.Draw(image, shapes))
+                {
+                    skipped = $"{Path.GetFileName(input)} has only one page.";
+                    continue;
+                }
             }
             else if (rotate)
             {
@@ -229,7 +238,7 @@ public sealed class ImagingEngine : IEngine
                 image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time"); // Magick's own date:create/modify text
             }
 
-            var pending = namer.Reserve(input, Path.GetExtension(input), job.ToolId switch { "rotate" => "-rotated", "crop" => "-cropped", _ => "-stripped" });
+            var pending = namer.Reserve(input, Path.GetExtension(input), job.ToolId switch { "rotate" => "-rotated", "crop" => "-cropped", "annotate" => "-annotated", _ => "-stripped" });
             await File.WriteAllBytesAsync(pending.Path, image.ToByteArray(format), ct).ConfigureAwait(false);
             made++;
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));

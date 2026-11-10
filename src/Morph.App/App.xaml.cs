@@ -14,6 +14,7 @@ using Morph.Core.Jobs;
 using Morph.Core.Logging;
 using Morph.Core.Settings;
 using Morph.Editors;
+using Morph.Editors.Annotate;
 using Morph.Editors.Crop;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
@@ -93,7 +94,8 @@ public sealed partial class App : Application
             _tray = new TrayIcon(bytes.ToArray(), _log);
         }
 
-        _editors["crop"] = () => new CropEditor((path, ct) => PreviewAsync("crop", path, ct));
+        _editors["crop"] = () => new CropEditor((path, page, ct) => PreviewAsync("crop", path, page, ct));
+        _editors["annotate"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("annotate", path, page, ct));
 
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;
@@ -331,7 +333,7 @@ public sealed partial class App : Application
 
     // An editor's picture of a file: the Worker of the tool's engine renders it into a temp folder as raw pixels
     // (PreviewFile), so the App never decodes a dropped file itself.
-    private async Task<PreviewImage> PreviewAsync(string tool, string path, CancellationToken ct)
+    private async Task<PreviewImage> PreviewAsync(string tool, string path, int page, CancellationToken ct)
     {
         var name = Path.GetFileName(path);
         var row = Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)
@@ -340,7 +342,7 @@ public sealed partial class App : Application
         try
         {
             var result = await WorkerClient.RunAsync(WorkerPath,
-                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048 }), null, ct);
+                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048, ["page"] = page }), null, ct);
             ct.ThrowIfCancellationRequested();
             if (result.Status != JobStatus.Succeeded || result.Outputs is not [var preview])
             {

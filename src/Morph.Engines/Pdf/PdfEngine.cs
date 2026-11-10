@@ -14,7 +14,7 @@ namespace Morph.Engines.Pdf;
 /// PDF → JPG/PNG (one image per page at 150 DPI) and PDF → TXT (CV-2) with PDFium. Tool ids: convert.jpg/png/txt.
 /// A multi-page PDF gives report-1.png, report-2.png, ... next to the original.
 /// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>. Crop sets page
-/// boxes (<see cref="PdfCrop"/>); preview is page 1 for the editors.
+/// boxes (<see cref="PdfCrop"/>), annotate draws on pages (<see cref="PdfAnnotate"/>); preview is one page for the editors.
 /// </summary>
 public sealed class PdfEngine : IEngine
 {
@@ -47,6 +47,12 @@ public sealed class PdfEngine : IEngine
         if (job.ToolId == "crop")
         {
             PdfCrop.Run(job, namer, progress, ct);
+            return;
+        }
+
+        if (job.ToolId == "annotate")
+        {
+            PdfAnnotate.Run(job, namer, progress, ct);
             return;
         }
 
@@ -161,7 +167,7 @@ public sealed class PdfEngine : IEngine
         }
     }
 
-    // Page 1 as shown (rotation applied) at about the size asked for; its size in points is what the editors return.
+    // One page ("page", 1-based, clamped) as shown (rotation applied) at about the size asked for; its size in points is what the editors return.
     private static async Task PreviewAsync(JobRequest job, OutputNamer namer, CancellationToken ct)
     {
         var input = job.Inputs[0];
@@ -172,15 +178,17 @@ public sealed class PdfEngine : IEngine
 
         MagickImage image;
         double widthPt, heightPt;
+        int pages;
         lock (Pdfium.Sync)
         {
-            var (doc, _) = Open(input);
+            (var doc, pages) = Open(input);
             try
             {
-                var page = Pdfium.FPDF_LoadPage(doc, 0);
+                var number = Math.Clamp(job.Parameters?["page"]?.GetValue<int>() ?? 1, 1, pages);
+                var page = Pdfium.FPDF_LoadPage(doc, number - 1);
                 if (page == 0)
                 {
-                    throw new EngineException($"Page 1 of {Path.GetFileName(input)} is damaged.", $"PDFium error {Pdfium.FPDF_GetLastError()}");
+                    throw new EngineException($"Page {number} of {Path.GetFileName(input)} is damaged.", $"PDFium error {Pdfium.FPDF_GetLastError()}");
                 }
 
                 try
@@ -202,7 +210,7 @@ public sealed class PdfEngine : IEngine
 
         using (image)
         {
-            await Preview.WriteAsync(image, widthPt, heightPt, job, namer, ct).ConfigureAwait(false);
+            await Preview.WriteAsync(image, widthPt, heightPt, job, namer, ct, pages).ConfigureAwait(false);
         }
     }
 
