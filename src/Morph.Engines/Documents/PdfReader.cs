@@ -17,9 +17,10 @@ namespace Morph.Engines.Documents;
 /// <summary>
 /// Rebuilds a document from a PDF's text (PDF → DOCX beta, CV-5). PdfPig finds words, text blocks and reading order; then
 /// bigger-than-body blocks become headings, lines that start with a bullet or number become list items, all-monospace blocks
-/// become code, and bold, italic and link areas carry over to the words. Pictures go between the blocks at their height on the page.
+/// become code, and bold, italic and link areas carry over to the words. Pictures and ruled tables (<see cref="PdfTables"/>) go
+/// between the blocks at their height on the page.
 /// </summary>
-// shortcut: tables come out as paragraphs (ruled tables: task 2.13), and a scanned PDF comes out as page pictures without text (needs OCR, task 2.8).
+// shortcut: tables without drawn lines come out as paragraphs, and a scanned PDF comes out as page pictures without text (needs OCR, task 2.8).
 internal static partial class PdfReader
 {
     private const int MaxPages = 2000; // same limit as the PDF engine
@@ -63,28 +64,31 @@ internal static partial class PdfReader
     }
 
     /// <param name="Bullet">Left edge of a bullet drawn as a shape (browsers and some editors do), if the line has one.</param>
-    /// <param name="Picture">Set on a picture's own line, which has no text and no block.</param>
-    private sealed record Line(IReadOnlyList<Run> Runs, double Size, double Left, bool Mono, TextBlock? Block, double? Bullet, Image? Picture = null);
+    /// <param name="Element">A picture or table on a line of its own, which has no text and no block.</param>
+    private sealed record Line(IReadOnlyList<Run> Runs, double Size, double Left, bool Mono, TextBlock? Block, double? Bullet, Block? Element = null);
 
     private static IEnumerable<Line> PageLines(Page page)
     {
-        // Pictures top to bottom; each goes before the first text line (in reading order) below its top, splitting the block there.
-        var pictures = new Queue<(double Top, Image Image)>(page.GetImages()
-            .Where(i => !i.IsImageMask && i.BoundingBox.Width >= MinPicture && i.BoundingBox.Height >= MinPicture)
-            .Select(i => (i.BoundingBox.Top, Image: Picture(i))).Where(p => p.Image is not null).OrderByDescending(p => p.Top)
-            .Select(p => (p.Top, p.Image!)));
+        var links = page.GetHyperlinks();
         var words = page.GetWords(NearestNeighbourWordExtractor.Instance).Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
+        var tables = PdfTables.Find(page, words, WordRuns);
+
+        // Pictures and tables top to bottom; each goes before the first text line (in reading order) below its top, splitting the block there.
+        var elements = new Queue<(double Top, Block Element)>(page.GetImages()
+            .Where(i => !i.IsImageMask && i.BoundingBox.Width >= MinPicture && i.BoundingBox.Height >= MinPicture)
+            .Select(i => (i.BoundingBox.Top, Element: (Block?)Picture(i))).Where(p => p.Element is not null).Select(p => (p.Top, p.Element!))
+            .Concat(tables.Select(t => (t.Top, (Block)t.Table)))
+            .OrderByDescending(p => p.Top));
         if (words.Count == 0)
         {
-            foreach (var (_, image) in pictures)
+            foreach (var (_, element) in elements)
             {
-                yield return new Line([], 0, 0, false, null, null, image);
+                yield return new Line([], 0, 0, false, null, null, element);
             }
 
             yield break;
         }
 
-        var links = page.GetHyperlinks();
         var shapes = page.Paths.Where(p => !p.IsClipping && (p.IsFilled || p.IsStroked)).Select(p => p.GetBoundingRectangle())
             .OfType<PdfRectangle>().Where(r => r.Width is > 0 and < 10 && r.Height is > 0 and < 10).ToList();
         var blocks = UnsupervisedReadingOrderDetector.Instance.Get(DocstrumBoundingBoxes.Instance.GetBlocks(words));
@@ -99,9 +103,9 @@ internal static partial class PdfReader
 
             foreach (var line in block.TextLines)
             {
-                while (pictures.Count > 0 && pictures.Peek().Top > line.BoundingBox.Top)
+                while (elements.Count > 0 && elements.Peek().Top > line.BoundingBox.Top)
                 {
-                    yield return new Line([], 0, 0, false, null, null, pictures.Dequeue().Image);
+                    yield return new Line([], 0, 0, false, null, null, elements.Dequeue().Element);
                 }
 
                 var runs = new List<Run>();
@@ -112,17 +116,7 @@ internal static partial class PdfReader
                         runs.Add(runs[^1] with { Text = " " });
                     }
 
-                    // Formatting per letter: "bold," is a bold word and a plain comma. Each word stays its own runs, so a list
-                    // marker ("1.") is the first run of its line.
-                    runs.AddRange(Runs.Normalize(word.Letters.Select(letter =>
-                    {
-                        var font = letter.FontName ?? "";
-                        return new Run(letter.Value,
-                            Bold: letter.FontDetails.IsBold || Has(font, "Bold", "Black", "Heavy", "Semibold"),
-                            Italic: letter.FontDetails.IsItalic || Has(font, "Italic", "Oblique"),
-                            Code: IsMono(font),
-                            Link: links.FirstOrDefault(l => l.Bounds.Contains(letter.BoundingBox.Centroid, true))?.Uri);
-                    })));
+                    runs.AddRange(WordRuns(word));
                 }
 
                 // A small shape just left of the line, at its height, is its bullet.
@@ -135,10 +129,22 @@ internal static partial class PdfReader
             }
         }
 
-        foreach (var (_, image) in pictures)
+        foreach (var (_, element) in elements)
         {
-            yield return new Line([], 0, 0, false, null, null, image);
+            yield return new Line([], 0, 0, false, null, null, element);
         }
+
+        // Formatting per letter: "bold," is a bold word and a plain comma. Each word stays its own runs, so a list
+        // marker ("1.") is the first run of its line.
+        List<Run> WordRuns(Word word) => Runs.Normalize(word.Letters.Select(letter =>
+        {
+            var font = letter.FontName ?? "";
+            return new Run(letter.Value,
+                Bold: letter.FontDetails.IsBold || Has(font, "Bold", "Black", "Heavy", "Semibold"),
+                Italic: letter.FontDetails.IsItalic || Has(font, "Italic", "Oblique"),
+                Code: IsMono(font),
+                Link: links.FirstOrDefault(l => l.Bounds.Contains(letter.BoundingBox.Centroid, true))?.Uri);
+        }));
     }
 
     // PdfPig decodes Flate and uncompressed pictures to PNG; JPEG and JPEG 2000 bytes go to Magick as they are.
@@ -166,7 +172,7 @@ internal static partial class PdfReader
         }
 
         // Body text is the size most characters have; distinctly bigger sizes are headings, the biggest is level 1.
-        var textLines = lines.Where(l => l.Picture is null).ToList();
+        var textLines = lines.Where(l => l.Element is null).ToList();
         var body = textLines.GroupBy(l => Math.Round(l.Size, 1)).MaxBy(g => g.Sum(l => Runs.Plain(l.Runs).Length))?.Key ?? 0;
         var headingSizes = textLines.Select(l => Math.Round(l.Size, 1)).Where(s => s >= body * 1.15).Distinct().OrderDescending().ToList();
 
@@ -174,10 +180,10 @@ internal static partial class PdfReader
         var itemLefts = new List<double>();
         foreach (var blockLines in Blocks(lines))
         {
-            if (blockLines[0].Picture is { } picture)
+            if (blockLines[0].Element is { } element)
             {
                 Flush();
-                result.Add(picture);
+                result.Add(element);
                 continue;
             }
 
@@ -262,14 +268,14 @@ internal static partial class PdfReader
         }
     }
 
-    // A block's lines are next to each other; a picture is a block of its own. Docstrum can lump a short heading in with the
+    // A block's lines are next to each other; a picture or table is a block of its own. Docstrum can lump a short heading in with the
     // text under it, so a jump in text size starts a new block too.
     private static IEnumerable<List<Line>> Blocks(List<Line> lines)
     {
         var block = new List<Line>();
         foreach (var line in lines)
         {
-            if (block.Count > 0 && (line.Picture is not null || block[0].Picture is not null || line.Block != block[0].Block
+            if (block.Count > 0 && (line.Element is not null || block[0].Element is not null || line.Block != block[0].Block
                 || Math.Abs(line.Size - block[^1].Size) > Math.Min(line.Size, block[^1].Size) * 0.15))
             {
                 yield return block;
@@ -304,7 +310,7 @@ internal static partial class PdfReader
 
     // A space between two words keeps only the formatting both share, so "**a** **b**" stays one bold run.
     // A heading is bold by its style already, so its bold flag is dropped.
-    private static List<Run> Clean(List<Run> runs, bool keepBold)
+    internal static List<Run> Clean(List<Run> runs, bool keepBold)
     {
         var cleaned = new List<Run>(runs.Count);
         for (var i = 0; i < runs.Count; i++)

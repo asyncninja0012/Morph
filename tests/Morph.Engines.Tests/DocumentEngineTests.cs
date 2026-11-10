@@ -142,6 +142,7 @@ public sealed class DocumentEngineTests : IDisposable
     {
         Heading h => $"H{h.Level} {Dump(h.Runs)}",
         Paragraph p => $"P {Dump(p.Runs)}",
+        Table t => "TABLE[" + string.Join("; ", t.Rows.Select(r => string.Join(" | ", r.Select(Dump)))) + "]",
         Image i => $"IMG {i.Format} {i.Width}x{i.Height} {i.Alt}",
         ListBlock l => (l.Ordered ? "OL[" : "UL[") + string.Join("; ", l.Items.Select(i => string.Join(" ", i.Select(b => b is Paragraph p ? Dump(p.Runs) : Dump(b))))) + "]",
         _ => block.GetType().Name,
@@ -184,6 +185,30 @@ public sealed class DocumentEngineTests : IDisposable
         var markdown = await ConvertFileAsync(docx, "md", expectedOutputs: 2);
         Assert.Contains("![A red box](<pics-1.png>)", await File.ReadAllTextAsync(markdown, TestContext.Current.CancellationToken), StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(_dir, "pics-1.png")));
+    }
+
+    [Fact]
+    public async Task Pdf_ruled_table_comes_back_as_a_table()
+    {
+        // Morph's HTML page draws every cell border, as most tables made in Word or a browser do.
+        var pdf = await ConvertAsync("table.md", """
+            Before the table.
+
+            | Name | Amount | Note |
+            | --- | --- | --- |
+            | Apples | 12 | Red and *crisp*, picked from the orchard on the hill behind the old farmhouse last autumn |
+            | Pears | 3 | |
+
+            After the table.
+            """, "pdf");
+
+        var blocks = await DocumentEngine.ReadAsync(pdf, TestContext.Current.CancellationToken);
+
+        Assert.Equal("""
+            P Before the table.
+            TABLE[[b:Name] | [b:Amount] | [b:Note]; Apples | 12 | Red and [i:crisp], picked from the orchard on the hill behind the old farmhouse last autumn; Pears | 3 | ]
+            P After the table.
+            """.ReplaceLineEndings("\n"), string.Join("\n", blocks.Select(Dump)));
     }
 
     [Fact]
