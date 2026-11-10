@@ -14,7 +14,7 @@ using Morph.Overlay;
 namespace Morph.Editors.Annotate;
 
 /// <summary>
-/// Annotate (ED-2) for pictures and PDF pages: arrow, box, ellipse, text, highlighter and pixelate (pictures only), in a
+/// Annotate (ED-2) for pictures and PDF pages: arrow, box, ellipse, text, highlighter, pen and pixelate (pictures only), in a
 /// colour and line width; undo and redo. Mouse: drag to draw, click to type (Text). Keyboard: letters pick the tool, Space adds
 /// a mark in the middle, arrows move the newest mark on the page, Shift+arrows resize it, Delete removes it, Page Up/Down turn
 /// PDF pages. Returns <see cref="Annotations"/> parameters; remembers the tool, colour and width.
@@ -23,7 +23,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
 {
     private static readonly (string Id, string Label, Key Key)[] ToolList =
     [
-        ("arrow", "Arrow", Key.A), ("rect", "Box", Key.R), ("ellipse", "Ellipse", Key.E), ("text", "Text", Key.T), ("highlight", "Highlight", Key.H), ("pixelate", "Pixelate", Key.P),
+        ("arrow", "Arrow", Key.A), ("rect", "Box", Key.R), ("ellipse", "Ellipse", Key.E), ("text", "Text", Key.T), ("highlight", "Highlight", Key.H), ("pen", "Pen", Key.D), ("pixelate", "Pixelate", Key.P),
     ];
 
     private static readonly (string Hex, string Name)[] ColorList =
@@ -230,9 +230,9 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
             (_bitmap, Picture.Source, _page, _pages) = (bitmap, bitmap, page, preview.Pages);
             _source = new Size(preview.SourceWidth, preview.SourceHeight);
 
-            // As large as the shell allows (80% of the work area) less its header, toolbar and footer; like crop.
+            // As large as the shell allows (80% of the work area) less its header, three toolbar rows and footer; like crop.
             var work = Screens.WorkAreaAtCursor();
-            _scale = Math.Min((work.Width * 0.8 - 60) / _source.Width, (work.Height * 0.8 - 190) / _source.Height);
+            _scale = Math.Min((work.Width * 0.8 - 60) / _source.Width, (work.Height * 0.8 - 270) / _source.Height);
             _scale = Math.Min(_scale, Math.Max(1, 640 / Math.Max(_source.Width, _source.Height)));
             Stage.Width = Math.Max(1, _source.Width * _scale);
             Stage.Height = Math.Max(1, _source.Height * _scale);
@@ -286,7 +286,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         }
 
         var at = ToSource(e.GetPosition(Stage));
-        if (_drawing.Type == "highlight")
+        if (_drawing.Type is "highlight" or "pen")
         {
             var last = _drawing.Points[^1];
             if (Math.Abs(at.X - last.X) * _scale + Math.Abs(at.Y - last.Y) * _scale >= 2)
@@ -312,7 +312,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         _drawing = null;
         Stage.ReleaseMouseCapture();
         var (_, _, w, h) = Annotations.Box(shape);
-        var big = shape.Type is "arrow" or "highlight" ? Math.Max(w, h) * _scale >= 4 : w * _scale >= 4 && h * _scale >= 4;
+        var big = shape.Type is "arrow" or "highlight" or "pen" ? Math.Max(w, h) * _scale >= 4 : w * _scale >= 4 && h * _scale >= 4;
         if (big)
         {
             Add(shape);
@@ -397,7 +397,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         (double, double)[] points = _tool switch
         {
             "arrow" => [(cx - dx, cy + dy), (cx + dx, cy - dy)],
-            "highlight" => [(cx - dx, cy), (cx + dx, cy)],
+            "highlight" or "pen" => [(cx - dx, cy), (cx + dx, cy)],
             _ => [(cx - dx, cy - dy), (cx + dx, cy + dy)],
         };
         Add(new AnnotationShape(_tool, points, _color, Stroke, Page: _page));
@@ -505,6 +505,11 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
                 var line = new Polyline { Points = [.. shape.Points.Select(P)], Stroke = ink, StrokeThickness = Annotations.HighlightWidth(shape.Stroke) };
                 (line.StrokeStartLineCap, line.StrokeEndLineCap, line.StrokeLineJoin) = (PenLineCap.Round, PenLineCap.Round, PenLineJoin.Round);
                 yield return line;
+                break;
+            case "pen":
+                var pen = new Polyline { Points = [.. shape.Points.Select(P)], Stroke = brush, StrokeThickness = shape.Stroke };
+                (pen.StrokeStartLineCap, pen.StrokeEndLineCap, pen.StrokeLineJoin) = (PenLineCap.Round, PenLineCap.Round, PenLineJoin.Round);
+                yield return pen;
                 break;
             case "text":
                 var text = new TextBlock { Text = shape.Text, FontFamily = new FontFamily("Segoe UI"), FontSize = Annotations.FontSize(shape.Stroke), Foreground = brush };

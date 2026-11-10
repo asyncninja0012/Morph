@@ -7,7 +7,7 @@ namespace Morph.Core.Jobs;
 /// <summary>
 /// One mark from the annotate editor (ED-2), in source units (pixels; PDF points on the page as shown), top-left origin.
 /// Arrow, rect, ellipse and pixelate have two points (start and end, or two corners); text has one (its top-left corner);
-/// highlight is a freehand line through all its points.
+/// highlight and pen are freehand lines through all their points.
 /// </summary>
 /// <param name="Color">"#RRGGBB".</param>
 /// <param name="Stroke">Line width; text is <see cref="Annotations.FontSize"/> of it, highlight <see cref="Annotations.HighlightWidth"/>.</param>
@@ -20,7 +20,7 @@ public sealed record AnnotationShape(string Type, IReadOnlyList<(double X, doubl
 /// </summary>
 public static partial class Annotations
 {
-    public static readonly string[] Types = ["arrow", "rect", "ellipse", "text", "highlight", "pixelate"];
+    public static readonly string[] Types = ["arrow", "rect", "ellipse", "text", "highlight", "pen", "pixelate"];
 
     /// <summary>Highlighter ink lets the page show through.</summary>
     public const double HighlightOpacity = 0.4;
@@ -114,7 +114,7 @@ public static partial class Annotations
                 points.Add((x, y));
             }
 
-            var needed = type switch { "text" => points.Count == 1, "highlight" => points.Count >= 2, _ => points.Count == 2 };
+            var needed = type switch { "text" => points.Count == 1, "highlight" or "pen" => points.Count >= 2, _ => points.Count == 2 };
             var color = (string?)o["color"] is { } c && Hex().IsMatch(c) ? c : throw Bad($"color {o["color"]?.ToJsonString()}");
             var stroke = Number(o["stroke"]) is { } s and > 0 and <= 10_000 ? s : throw Bad($"stroke {o["stroke"]?.ToJsonString()}");
             var page = o["page"] is null ? 1 : Number(o["page"]) is { } n && n >= 1 && n == Math.Floor(n) && n <= int.MaxValue ? (int)n : throw Bad($"page {o["page"]?.ToJsonString()}");

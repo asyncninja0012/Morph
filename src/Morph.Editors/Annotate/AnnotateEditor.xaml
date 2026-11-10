@@ -3,22 +3,23 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Focusable="True" IsTabStop="False" FocusVisualStyle="{x:Null}">
     <DockPanel>
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-            <StackPanel x:Name="PagePanel" DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0" Visibility="Collapsed">
-                <Button x:Name="PrevPage" Content="‹" ToolTip="Previous page (Page Up)" AutomationProperties.Name="Previous page" MinWidth="32" />
-                <TextBlock x:Name="PageText" VerticalAlignment="Center" Margin="8,0" AutomationProperties.LiveSetting="Polite"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <Button x:Name="NextPage" Content="›" ToolTip="Next page (Page Down)" AutomationProperties.Name="Next page" MinWidth="32" />
-            </StackPanel>
-            <Button x:Name="RedoButton" DockPanel.Dock="Right" Content="Redo" ToolTip="Ctrl+Y" IsEnabled="False" Margin="12,0,0,0" />
-            <WrapPanel>
-                <StackPanel x:Name="Tools" Orientation="Horizontal" Margin="0,0,0,4" AutomationProperties.Name="Tool" KeyboardNavigation.DirectionalNavigation="Cycle" />
-                <StackPanel x:Name="ColorChips" Orientation="Horizontal" Margin="12,0,0,4" AutomationProperties.Name="Colour" KeyboardNavigation.DirectionalNavigation="Cycle" />
-                <StackPanel x:Name="Strokes" Orientation="Horizontal" Margin="12,0,0,4" AutomationProperties.Name="Line width" KeyboardNavigation.DirectionalNavigation="Cycle" />
-            </WrapPanel>
-        </DockPanel>
+        <!-- One row per choice, stacked, so the window grows down rather than wide (the shell sizes to its content). -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <StackPanel x:Name="Tools" Orientation="Horizontal" Margin="0,0,0,6" AutomationProperties.Name="Tool" KeyboardNavigation.DirectionalNavigation="Cycle" />
+            <StackPanel x:Name="ColorChips" Orientation="Horizontal" Margin="0,0,0,6" AutomationProperties.Name="Colour" KeyboardNavigation.DirectionalNavigation="Cycle" />
+            <DockPanel>
+                <Button x:Name="RedoButton" DockPanel.Dock="Right" Content="Redo" ToolTip="Ctrl+Y" IsEnabled="False" Margin="12,0,0,0" />
+                <StackPanel x:Name="Strokes" Orientation="Horizontal" AutomationProperties.Name="Line width" KeyboardNavigation.DirectionalNavigation="Cycle" />
+            </DockPanel>
+        </StackPanel>
         <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        <StackPanel x:Name="PagePanel" DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0" Visibility="Collapsed">
+            <Button x:Name="PrevPage" Content="‹" ToolTip="Previous page (Page Up)" AutomationProperties.Name="Previous page" MinWidth="32" />
+            <TextBlock x:Name="PageText" VerticalAlignment="Center" Margin="8,0" AutomationProperties.LiveSetting="Polite"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button x:Name="NextPage" Content="›" ToolTip="Next page (Page Down)" AutomationProperties.Name="Next page" MinWidth="32" />
+        </StackPanel>
         <Grid x:Name="Stage" HorizontalAlignment="Center" VerticalAlignment="Center" ClipToBounds="True" Cursor="Cross" Background="Transparent"
               Focusable="True" AutomationProperties.Name="Picture. Space adds a mark, arrow keys move the last one, Shift with arrow keys resizes it, Delete removes it.">
             <Image x:Name="Picture" Stretch="Fill" />

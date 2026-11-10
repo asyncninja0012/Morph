@@ -111,6 +111,9 @@ internal static class PdfAnnotate
                 gfx.DrawLines(new XPen(ink, Annotations.HighlightWidth(shape.Stroke)) { LineCap = XLineCap.Round, LineJoin = XLineJoin.Round },
                     [.. shape.Points.Select(p => new XPoint(p.X, p.Y))]);
                 break;
+            case "pen":
+                gfx.DrawLines(pen, [.. shape.Points.Select(p => new XPoint(p.X, p.Y))]);
+                break;
             case "text":
                 gfx.DrawString(shape.Text!, new XFont("Segoe UI", Annotations.FontSize(shape.Stroke)), new XSolidBrush(color), x, y, XStringFormats.TopLeft);
                 break;

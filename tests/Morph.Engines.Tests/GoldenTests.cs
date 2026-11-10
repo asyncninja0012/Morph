@@ -428,7 +428,7 @@ public sealed class GoldenTests : IDisposable
     }
 
     // ED-2: every kind of mark is drawn where the editor put it, in its colour (green: nothing in the fixtures is green). Pictures:
-    // a box edge at x 20, text near 75,62 and pixelate over the top of the blue circle; PDF (pixelate isn't offered): the same
+    // a box edge at x 20, text near 75,62, a pen line through 40,20 and pixelate over the top of the blue circle; PDF (pixelate isn't offered): the same
     // box on both pages (page 5 doesn't exist and is skipped), rendered at 150 DPI.
     [Theory]
     [MemberData(nameof(AnnotateRows))]
@@ -447,6 +447,7 @@ public sealed class GoldenTests : IDisposable
             new("arrow", [(30, 110), (60, 80)], Green, 2),
             new("highlight", [(100, 10), (120, 12), (140, 10)], "#FFD60A", 3),
             new("text", [(75, 62)], Green, 4, "Hi"),
+            new("pen", [(10, 30), (40, 20), (70, 30)], Green, 6),
         ];
         if (pdf)
         {
@@ -485,6 +486,7 @@ public sealed class GoldenTests : IDisposable
             }
 
             Assert.True(text > 10, $"no text on {from}");
+            Assert.True(IsGreen(first.GetPixel((int)(40 * scale), (int)(20 * scale))!.ToColor()!), $"no pen line on {from}");
             if (from is "png" or "bmp" or "tiff")
             {
                 // The circle's top edge (white above y 50, blue below) falls inside one pixel cell.

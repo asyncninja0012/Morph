@@ -38,6 +38,9 @@ internal static class ImageAnnotate
                     new Drawables().StrokeColor(ink).StrokeWidth(Annotations.HighlightWidth(shape.Stroke)).FillColor(MagickColors.Transparent)
                         .StrokeLineCap(LineCap.Round).StrokeLineJoin(LineJoin.Round).Polyline(shape.Points.Select(p => new PointD(p.X, p.Y))).Draw(image);
                     break;
+                case "pen":
+                    line.Polyline(shape.Points.Select(p => new PointD(p.X, p.Y))).Draw(image);
+                    break;
                 case "text":
                     var text = new Drawables().FillColor(color).StrokeColor(MagickColors.Transparent).FontPointSize(Annotations.FontSize(shape.Stroke))
                         .Gravity(Gravity.Northwest);
