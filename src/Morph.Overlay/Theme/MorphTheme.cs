@@ -18,19 +18,22 @@ public static class MorphTheme
 
         Set(root, "AccentTextFillColorPrimaryBrush", accent);
         foreach (var key in new[] { "AccentFillColorDefaultBrush", "AccentButtonBackground", "AccentButtonBorderBrush", "ToggleButtonBackgroundChecked",
-            "CheckBoxCheckBackgroundFillChecked", "CheckBoxCheckBackgroundStrokeChecked", "TextControlFocusedBorderBrush" })
+            "CheckBoxCheckBackgroundFillChecked", "CheckBoxCheckBackgroundStrokeChecked", "TextControlFocusedBorderBrush",
+            "SliderTrackValueFill", "SliderThumbBackground" })
         {
             Set(root, key, accent);
         }
 
         foreach (var key in new[] { "AccentFillColorSecondaryBrush", "AccentButtonBackgroundPointerOver", "AccentButtonBorderBrushPointerOver", "ToggleButtonBackgroundCheckedPointerOver",
-            "CheckBoxCheckBackgroundFillCheckedPointerOver", "CheckBoxCheckBackgroundStrokeCheckedPointerOver" })
+            "CheckBoxCheckBackgroundFillCheckedPointerOver", "CheckBoxCheckBackgroundStrokeCheckedPointerOver",
+            "SliderTrackValueFillPointerOver", "SliderThumbBackgroundPointerOver" })
         {
             Set(root, key, hover);
         }
 
         foreach (var key in new[] { "AccentFillColorTertiaryBrush", "AccentButtonBackgroundPressed", "AccentButtonBorderBrushPressed", "ToggleButtonBackgroundCheckedPressed", "ToggleButtonBorderBrushCheckedPressed",
-            "CheckBoxCheckBackgroundFillCheckedPressed", "CheckBoxCheckBackgroundStrokeCheckedPressed" })
+            "CheckBoxCheckBackgroundFillCheckedPressed", "CheckBoxCheckBackgroundStrokeCheckedPressed",
+            "SliderTrackValueFillPressed", "SliderThumbBackgroundPressed" })
         {
             Set(root, key, pressed);
         }

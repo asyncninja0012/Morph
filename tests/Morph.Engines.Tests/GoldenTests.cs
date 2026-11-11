@@ -592,6 +592,44 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
+    public static TheoryData<string, string> SpeedRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "speed"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-7 on the 1 s fixtures: 2× lasts 0.5 s and 0.5× lasts 2 s (video re-encoded like an exact trim: MKV/WebM stay, others → MP4;
+    // sound keeps its format), named sample-2x / sample-0.5x; 1× has nothing to do.
+    [Theory]
+    [MemberData(nameof(SpeedRows))]
+    public async Task Speed_row_changes_the_length(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var video = FileFormat.FromExtension(from).Kind == FileKind.Video;
+        Assert.SkipWhen(video && from is not ("webm" or "mkv") && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+        var kept = video ? (from is "mkv" or "webm" ? from : "mp4") : from;
+
+        foreach (var (speed, length) in new[] { (2.0, 0.5), (0.5, 2.0) })
+        {
+            var output = Assert.Single((await RunAsync("speed", engine, [input], ct, Speeds.ToParameters(speed))).Outputs);
+            Assert.Equal($"sample{Speeds.Suffix(speed)}.{kept}", Path.GetFileName(output));
+            Assert.InRange((await ProbeAsync(output, ct)).Duration, length - 0.12, length + 0.12);
+        }
+
+        var same = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), "speed", engine, [input], _dir, Speeds.ToParameters(1)), null, ct);
+        Assert.Equal((JobStatus.Failed, $"sample.{from} is already at that speed."), (same.Status, same.UserMessage));
+    }
+
     // A cut covering the whole file has nothing to do.
     [Fact]
     public async Task Trim_of_the_whole_file_is_skipped()

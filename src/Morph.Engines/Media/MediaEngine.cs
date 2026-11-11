@@ -68,6 +68,9 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             case "trim":
                 await TrimAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
+            case "speed":
+                await SpeedAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
             case PreviewFile.PlaybackToolId:
                 await PlaybackAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
@@ -531,6 +534,46 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 
         var extension = AudioOutputs.ContainsKey(format.Id) ? format.Id : "m4a";
         return (extension, ["-map", "0:a:0", "-vn", .. AudioOutputs[extension].Audio, "-f", AudioOutputs[extension].Muxer]);
+    }
+
+    // Change speed (ED-7): re-encoded like an exact trim (MKV/WebM stay, other video → MP4, a sound file keeps its format), the picture
+    // retimed (setpts) at the source frame rate (cfr: frames dropped when faster, repeated when slower), the sound by atempo, which keeps its pitch.
+    private async Task SpeedAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var speed = Speeds.Parse(job.Parameters);
+        if (speed == 1)
+        {
+            throw new EngineException(job.Inputs is [var one] ? $"{Path.GetFileName(one)} is already at that speed." : "These are already at that speed.");
+        }
+
+        var tempo = Speeds.Atempo(speed);
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            var input = job.Inputs[i];
+            var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+            var demuxer = Demuxer(input, format);
+            var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+            string extension;
+            string[] output;
+            if (info.VideoCodec is not null)
+            {
+                extension = format.Id is "mkv" or "webm" ? format.Id : "mp4";
+                var video = await VideoArgsAsync(extension, null, 23, kbps: null, ct, filter: $"setpts=PTS/{Seconds(speed)}").ConfigureAwait(false);
+                output = Video([.. video, "-fps_mode", "cfr"], [.. VideoOutputs[Muxer(extension)].Audio, "-af", tempo], extension);
+            }
+            else
+            {
+                extension = AudioOutputs.ContainsKey(format.Id) ? format.Id : "m4a";
+                output = ["-map", "0:a:0", "-vn", .. AudioOutputs[extension].Audio, "-af", tempo, "-f", AudioOutputs[extension].Muxer];
+            }
+
+            var done = i;
+            var fileProgress = new SyncProgress<JobProgress>(p =>
+                progress.Report(p with { Fraction = double.IsNaN(p.Fraction) ? p.Fraction : (done + p.Fraction) / job.Inputs.Count }));
+            var pending = namer.Reserve(input, "." + extension, Speeds.Suffix(speed));
+            await ffmpeg.EncodeAsync(["-protocol_whitelist", "file", "-f", demuxer, "-i", input, "-map_metadata", "0", .. output, pending.Path],
+                info.Duration / speed, fileProgress, ct).ConfigureAwait(false);
+        }
     }
 
     private static string Seconds(double s) => s.ToString("0.###", CultureInfo.InvariantCulture);

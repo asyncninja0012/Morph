@@ -19,6 +19,7 @@ using Morph.Editors;
 using Morph.Editors.Annotate;
 using Morph.Editors.Crop;
 using Morph.Editors.Pages;
+using Morph.Editors.Speed;
 using Morph.Editors.Trim;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
@@ -109,6 +110,7 @@ public sealed partial class App : Application
         _editors["redact"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("redact", path, page, ct), redact: true);
         _editors["organize"] = () => new PageEditor((path, first, ct) => PreviewAsync("organize", path, 1, ct, sheet: first));
         _editors["trim"] = () => new TrimEditor((path, shape, ct) => PreviewAsync("trim", path, 1, ct, shape), (path, progress, ct) => PlaybackAsync("trim", path, progress, ct));
+        _editors["speed"] = () => new SpeedEditor((path, progress, ct) => PlaybackAsync("speed", path, progress, ct));
         _ = Task.Run(() =>
         {
             // Copies left by a crash or a forced quit.
