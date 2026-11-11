@@ -9,6 +9,18 @@ namespace Morph.Editors;
 public delegate Task<PreviewImage> PreviewLoader(string path, int page, CancellationToken ct);
 
 /// <summary>
+/// Gets the Worker's timeline picture of a video (as many frames as fill a strip of <paramref name="shape"/>, width ÷ height) or
+/// sound file (its waveform), with its length.
+/// </summary>
+public delegate Task<PreviewImage> TimelineLoader(string path, double shape, CancellationToken ct);
+
+/// <summary>
+/// Has the Worker make a small copy of a video or sound file that the App may play (H.264/AAC written by Morph's own encoder, never
+/// the dropped file), reporting 0..1; returns the copy's path. The App deletes it after the editor closes.
+/// </summary>
+public delegate Task<string> PlaybackLoader(string path, IProgress<double> progress, CancellationToken ct);
+
+/// <summary>
 /// One editor's content inside <see cref="EditorShell"/>. An editor only collects parameters for the job; it never writes files.
 /// The shell calls <see cref="LoadAsync"/> once per file shown, then reads <see cref="Parameters"/> and <see cref="Settings"/> on Done.
 /// </summary>

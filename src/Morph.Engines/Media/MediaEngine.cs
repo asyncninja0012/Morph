@@ -12,7 +12,8 @@ namespace Morph.Engines.Media;
 /// Video and audio conversion through ffmpeg (PLAN §5): video → MP4/WebM/GIF/MP3, audio ↔ audio. Compress and resize
 /// (IT-1, IT-2): MKV and WebM stay themselves, other video becomes H.264 MP4, WAV/FLAC become M4A, lossy audio keeps its format.
 /// Instant tools (IT-3): rotate, strip-metadata, extract-audio, mute, make-gif, and merge in the order given. Crop (ED-1) re-encodes
-/// like rotate; preview is one frame for the editors.
+/// like rotate; trim (ED-4) cuts parts by copying streams (fast) or re-encoding (exact). Preview is one frame, or a filmstrip or
+/// waveform with the length, for the editors; playback is the trim editor's small copy to play.
 /// </summary>
 public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
 {
@@ -63,6 +64,12 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
                 return;
             case "merge":
                 await MergeAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
+            case "trim":
+                await TrimAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
+            case PreviewFile.PlaybackToolId:
+                await PlaybackAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
         }
 
@@ -349,6 +356,12 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
         var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
         var demuxer = Demuxer(input, format);
         var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+        if (job.Parameters?["strip"] is { } strip)
+        {
+            await StripAsync(job, input, demuxer, info, double.TryParse(strip.ToJsonString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var shape) ? shape : 8, namer, ct).ConfigureAwait(false);
+            return;
+        }
+
         if (info.VideoCodec is null)
         {
             throw new EngineException($"{Path.GetFileName(input)} has no picture.");
@@ -368,6 +381,159 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             namer.Discard(frame);
         }
     }
+
+    // The trim editor's timeline: for video, as many frames side by side (each one fast input seek, 90 px high) as fill a strip of
+    // `shape` (width ÷ height) without squashing them; for sound, the waveform. The preview carries the length and, for video,
+    // the shown size.
+    private async Task StripAsync(JobRequest job, string input, string demuxer, MediaInfo info, double shape, OutputNamer namer, CancellationToken ct)
+    {
+        var name = Path.GetFileName(input);
+        if (info.Duration is not { } seconds)
+        {
+            throw new EngineException($"Morph can't tell how long {name} is.");
+        }
+
+        if (info.VideoCodec is null && info.AudioCodec is null)
+        {
+            throw new EngineException($"{name} has no picture or sound.");
+        }
+
+        var picture = namer.Reserve(input, ".png", "-strip");
+        try
+        {
+            string[] args;
+            if (info.VideoCodec is null)
+            {
+                args = ["-protocol_whitelist", "file", "-f", demuxer, "-i", input, "-filter_complex", "[0:a:0]aformat=channel_layouts=mono,showwavespic=s=1600x120:colors=0xF28C28"];
+            }
+            else
+            {
+                var (w, h) = info.ShownSize;
+                var count = (int)Math.Clamp(Math.Round(shape / (h > 0 ? (double)w / h : 16.0 / 9)), 1, 24);
+                var inputs = new List<string>();
+                var graph = new StringBuilder();
+                for (var i = 0; i < count; i++)
+                {
+                    inputs.AddRange(["-ss", Seconds(seconds * i / count), "-protocol_whitelist", "file", "-f", demuxer, "-i", input]);
+                    graph.Append(CultureInfo.InvariantCulture, $"[{i}:V:0]scale=-2:90,setsar=1,format=rgb24[t{i}];");
+                }
+
+                graph.Append(count == 1 ? "[t0]null" : $"{string.Concat(Enumerable.Range(0, count).Select(i => $"[t{i}]"))}hstack=inputs={count}");
+                args = [.. inputs, "-filter_complex", graph.ToString()];
+            }
+
+            await ffmpeg.EncodeAsync([.. args, "-frames:v", "1", "-c:v", "png", "-f", "image2", picture.Path], null, new SyncProgress<JobProgress>(_ => { }), ct).ConfigureAwait(false);
+            using var image = new MagickImage(picture.Path, new MagickReadSettings { Format = MagickFormat.Png });
+            var (width, height) = info.VideoCodec is null ? ((int)image.Width, (int)image.Height) : info.ShownSize;
+            await Preview.WriteAsync(image, width, height, job, namer, ct, duration: seconds).ConfigureAwait(false);
+        }
+        finally
+        {
+            namer.Discard(picture);
+        }
+    }
+
+    // A copy the App can play without decoding the dropped file: Morph's own encoder writes it, at most 960×540, a keyframe
+    // every 15 frames so seeking lands close, AAC stereo sound; M4A for a sound-only file.
+    private async Task PlaybackAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var input = job.Inputs[0];
+        var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+        var demuxer = Demuxer(input, format);
+        var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+        string[] sound = ["-c:a", "aac", "-b:a", "128k", "-ac", "2"];
+        if (info.VideoCodec is null)
+        {
+            if (info.AudioCodec is null)
+            {
+                throw new EngineException($"{Path.GetFileName(input)} has no picture or sound.");
+            }
+
+            await EncodeAsync(input, demuxer, ["-map", "0:a:0", "-vn", .. sound, "-f", "ipod"], namer.Reserve(input, ".m4a", "-playback").Path, info, progress, ct, keepMetadata: false)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var h264 = await probe.H264Async(ct).ConfigureAwait(false)
+            ?? throw new EngineException("This PC has no H.264 video encoder. On Windows N, install the Media Feature Pack.");
+        string[] output =
+        [
+            "-map", "0:V:0", "-map", "0:a:0?",
+            "-vf", "scale=w='min(960,iw)':h='min(540,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12",
+            .. h264.Quality(30), "-g", "15", .. sound, "-movflags", "+faststart", "-f", "mp4",
+        ];
+        await EncodeAsync(input, demuxer, output, namer.Reserve(input, ".mp4", "-playback").Path, info, progress, ct, keepMetadata: false).ConfigureAwait(false);
+    }
+
+    // Trim (ED-4): each segment becomes a file (name-trimmed.ext, or name-part1.ext, name-part2.ext, ...). Fast copies the streams
+    // in the file's own format: ffmpeg starts each part at the keyframe at or before its start. Exact re-encodes like rotate
+    // (MKV/WebM stay, other video → MP4, sound re-encoded; a sound file keeps its format). Segments past the end are dropped and the last one is cut at
+    // the end, so "Same for all" works on shorter files.
+    private async Task TrimAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var (segments, exact) = Trims.Parse(job.Parameters);
+        string? skipped = null;
+        var made = 0;
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            var input = job.Inputs[i];
+            var name = Path.GetFileName(input);
+            var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+            var demuxer = Demuxer(input, format);
+            var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+            var length = info.Duration;
+            var parts = segments.Where(s => length is not { } d || s.Start < d - 0.01).Select(s => length is { } d && s.End > d ? s with { End = d } : s).ToList();
+            if (parts.Count == 0)
+            {
+                skipped = $"{name} is shorter than where you cut.";
+                continue;
+            }
+
+            if (parts is [var only] && only.Start <= 0.01 && length is { } full && only.End >= full - 0.01)
+            {
+                skipped = $"{name} is already that length.";
+                continue;
+            }
+
+            var (extension, output) = exact
+                ? await ExactTrimArgsAsync(format, info, ct).ConfigureAwait(false)
+                : (format.Id, ["-map", "0:V?", "-map", "0:a?", "-map", "0:s?", "-c", "copy", "-avoid_negative_ts", "make_zero", "-f", SameMuxer(format)]);
+            for (var k = 0; k < parts.Count; k++)
+            {
+                var (done, part) = (i + (double)k / parts.Count, parts[k]);
+                var partProgress = new SyncProgress<JobProgress>(p =>
+                    progress.Report(p with { Fraction = double.IsNaN(p.Fraction) ? p.Fraction : (done + p.Fraction / parts.Count) / job.Inputs.Count }));
+                var seconds = part.End - part.Start;
+                var pending = namer.Reserve(input, "." + extension, parts.Count == 1 ? "-trimmed" : $"-part{k + 1}");
+                await ffmpeg.EncodeAsync(
+                    ["-ss", Seconds(part.Start), "-t", Seconds(seconds), "-protocol_whitelist", "file", "-f", demuxer, "-i", input, "-map_metadata", "0", .. output, pending.Path],
+                    seconds, partProgress, ct).ConfigureAwait(false);
+            }
+
+            made++;
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
+        }
+    }
+
+    private async Task<(string Extension, string[] Output)> ExactTrimArgsAsync(FileFormat format, MediaInfo info, CancellationToken ct)
+    {
+        if (info.VideoCodec is not null)
+        {
+            // Sound re-encoded too: copied sound starts at a packet before the cut, and the muxer shifts the picture to match.
+            var container = format.Id is "mkv" or "webm" ? format.Id : "mp4";
+            var video = await VideoArgsAsync(container, null, 23, kbps: null, ct).ConfigureAwait(false);
+            return (container, Video(video, VideoOutputs[Muxer(container)].Audio, container));
+        }
+
+        var extension = AudioOutputs.ContainsKey(format.Id) ? format.Id : "m4a";
+        return (extension, ["-map", "0:a:0", "-vn", .. AudioOutputs[extension].Audio, "-f", AudioOutputs[extension].Muxer]);
+    }
+
+    private static string Seconds(double s) => s.ToString("0.###", CultureInfo.InvariantCulture);
 
     // The sound as it is when a plain audio file can hold it (video.mp4 → video.m4a in seconds), else AAC in M4A.
     private static (string, string, bool, string[]) ExtractArgs(string codec)

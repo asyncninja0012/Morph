@@ -546,6 +546,87 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
+    public static TheoryData<string, string> TrimRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "trim"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-4 on the 1 s fixtures: the timeline preview (8 frames 90 px high fill an 8×(4:3) strip, or a 1600×120 waveform) carries the length; an exact
+    // cut of 0.2–0.7 s lasts 0.5 s (video re-encoded: MKV/WebM stay, others → MP4; sound keeps its format); a fast split at
+    // 0.5 s gives two parts in the file's own format.
+    [Theory]
+    [MemberData(nameof(TrimRows))]
+    public async Task Trim_row_cuts_and_splits(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var video = FileFormat.FromExtension(from).Kind == FileKind.Video;
+        Assert.SkipWhen(video && from is not ("webm" or "mkv") && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+
+        var stripPath = Assert.Single((await RunAsync(PreviewFile.ToolId, engine, [input], ct, new() { ["strip"] = 8 * 4.0 / 3 })).Outputs);
+        var strip = await PreviewFile.ReadAsync(stripPath, ct);
+        File.Delete(stripPath);
+        Assert.InRange(strip.Duration, 0.9, 1.1);
+        Assert.Equal(video ? (960, 90, 320.0, 240.0) : (1600, 120, 1600.0, 120.0), (strip.Width, strip.Height, strip.SourceWidth, strip.SourceHeight));
+
+        var exact = Assert.Single((await RunAsync("trim", engine, [input], ct, Trims.ToParameters([new(0.2, 0.7)], exact: true))).Outputs);
+        var kept = video ? (from is "mkv" or "webm" ? from : "mp4") : from;
+        Assert.Equal($"sample-trimmed.{kept}", Path.GetFileName(exact));
+        Assert.InRange((await ProbeAsync(exact, ct)).Duration, 0.4, 0.6);
+
+        var parts = (await RunAsync("trim", engine, [input], ct, Trims.ToParameters([new(0, 0.5), new(0.5, 1)], exact: false))).Outputs;
+        Assert.Equal([$"sample-part1.{from}", $"sample-part2.{from}"], parts.Select(Path.GetFileName));
+        foreach (var part in parts)
+        {
+            Assert.InRange((await ProbeAsync(part, ct)).Duration, 0.01, 1.05);
+        }
+    }
+
+    // A cut covering the whole file has nothing to do.
+    [Fact]
+    public async Task Trim_of_the_whole_file_is_skipped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var input = Path.Combine(_dir, "sample.wav");
+        File.Copy(Path.Combine(Fixtures, "sample.wav"), input);
+
+        var result = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), "trim", "media", [input], _dir, Trims.ToParameters([new(0, 5)], exact: false)), null, ct);
+
+        Assert.Equal((JobStatus.Failed, "sample.wav is already that length."), (result.Status, result.UserMessage));
+        Assert.Equal([input], Directory.GetFiles(_dir));
+    }
+
+    // The trim editor's player plays only this Morph-made copy: H.264 + AAC MP4 at most 960×540, or AAC M4A for sound.
+    [Theory]
+    [InlineData("mov", "h264,aac", "320x240")]
+    [InlineData("flac", "aac", null)]
+    public async Task Playback_copy_is_plain_h264_and_aac(string from, string codecs, string? size)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        Assert.SkipWhen(from == "mov" && await new EncoderProbe(_ffmpeg, _dir).H264Async(ct) is null, "no H.264 encoder on this machine");
+        var input = Path.Combine(_dir, $"sample.{from}");
+        File.Copy(Path.Combine(Fixtures, $"sample.{from}"), input);
+
+        var copy = Assert.Single((await RunAsync(PreviewFile.PlaybackToolId, "media", [input], ct, [])).Outputs);
+
+        Assert.Equal(size is null ? ".m4a" : ".mp4", Path.GetExtension(copy));
+        var probe = await ProbeAsync(copy, ct);
+        Assert.Equal((codecs, size), (string.Join(",", probe.Codecs), probe.Size));
+        Assert.InRange(probe.Duration, 0.9, 1.1);
+    }
+
     public static TheoryData<string, string> PasswordRows()
     {
         var rows = new TheoryData<string, string>();

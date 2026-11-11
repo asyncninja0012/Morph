@@ -16,6 +16,7 @@ using Morph.Core.Settings;
 using Morph.Editors;
 using Morph.Editors.Annotate;
 using Morph.Editors.Crop;
+using Morph.Editors.Trim;
 using Morph.Overlay.Input;
 using Morph.Overlay.Wheel;
 
@@ -44,6 +45,9 @@ public sealed partial class App : Application
 
     // Tools that open in the editor shell (ED-6), by tool id. Annotate, Redact, Trim and the page organizer land in 3.3-3.6.
     private readonly Dictionary<string, Func<IEditor>> _editors = [];
+
+    // The trim player's copies (temp folders), deleted when the editor closes.
+    private readonly List<string> _playbackFolders = [];
 
     private readonly DragGestureDetector _dragGestures = new();
     private readonly JobHistory _history = new(TimeProvider.System);
@@ -97,6 +101,15 @@ public sealed partial class App : Application
         _editors["crop"] = () => new CropEditor((path, page, ct) => PreviewAsync("crop", path, page, ct));
         _editors["annotate"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("annotate", path, page, ct));
         _editors["redact"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("redact", path, page, ct), redact: true);
+        _editors["trim"] = () => new TrimEditor((path, shape, ct) => PreviewAsync("trim", path, 1, ct, shape), (path, progress, ct) => PlaybackAsync("trim", path, progress, ct));
+        _ = Task.Run(() =>
+        {
+            // Copies left by a crash or a forced quit.
+            foreach (var stale in Directory.EnumerateDirectories(Path.GetTempPath(), "morph-playback-*"))
+            {
+                DeleteFolder(stale);
+            }
+        });
 
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;
@@ -278,7 +291,19 @@ public sealed partial class App : Application
     {
         var settings = await _toolSettings!;
         var tool = ToolId(item);
-        if (await EditorShell.EditAsync(editor, files.Paths, settings.Get(tool), _log) is not { } edited)
+        EditResult? edited;
+        try
+        {
+            edited = await EditorShell.EditAsync(editor, files.Paths, settings.Get(tool), _log);
+        }
+        finally
+        {
+            string[] copies = [.. _playbackFolders];
+            _playbackFolders.Clear();
+            _ = Task.Run(() => Array.ForEach(copies, DeleteFolder));
+        }
+
+        if (edited is null)
         {
             _log.LogInformation("{Tool} cancelled", item.Id);
             return;
@@ -334,7 +359,7 @@ public sealed partial class App : Application
 
     // An editor's picture of a file: the Worker of the tool's engine renders it into a temp folder as raw pixels
     // (PreviewFile), so the App never decodes a dropped file itself.
-    private async Task<PreviewImage> PreviewAsync(string tool, string path, int page, CancellationToken ct)
+    private async Task<PreviewImage> PreviewAsync(string tool, string path, int page, CancellationToken ct, double? strip = null)
     {
         var name = Path.GetFileName(path);
         var row = Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)
@@ -343,7 +368,7 @@ public sealed partial class App : Application
         try
         {
             var result = await WorkerClient.RunAsync(WorkerPath,
-                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048, ["page"] = page }), null, ct);
+                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048, ["page"] = page, ["strip"] = strip }), null, ct);
             ct.ThrowIfCancellationRequested();
             if (result.Status != JobStatus.Succeeded || result.Outputs is not [var preview])
             {
@@ -372,6 +397,43 @@ public sealed partial class App : Application
                     _log.LogWarning(ex, "Couldn't delete the preview folder {Folder}", folder);
                 }
             }, CancellationToken.None);
+        }
+    }
+
+    // The trim player's copy: made by the Worker (Morph's own encoder) into a temp folder kept until the editor closes.
+    private async Task<string> PlaybackAsync(string tool, string path, IProgress<double> progress, CancellationToken ct)
+    {
+        var row = Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)
+            ?? throw new EngineException($"{Path.GetFileName(path)} can't be opened here.", $"no {tool} row for {path}");
+        var folder = await Task.Run(() => Directory.CreateTempSubdirectory("morph-playback-").FullName, ct);
+        _playbackFolders.Add(folder);
+        var result = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), PreviewFile.PlaybackToolId, row.Engine, [path], folder),
+            new Progress<JobProgress>(p =>
+            {
+                if (!double.IsNaN(p.Fraction))
+                {
+                    progress.Report(p.Fraction);
+                }
+            }), ct);
+        ct.ThrowIfCancellationRequested();
+        return result.Status == JobStatus.Succeeded && result.Outputs is [var copy]
+            ? copy
+            : throw new EngineException(result.UserMessage ?? "Morph couldn't make a copy to play.", result.Details);
+    }
+
+    private void DeleteFolder(string folder)
+    {
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            _log.LogWarning(ex, "Couldn't delete {Folder}", folder);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.LogWarning(ex, "Couldn't delete {Folder}", folder);
         }
     }
 

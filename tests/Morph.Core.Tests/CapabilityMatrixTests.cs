@@ -65,12 +65,12 @@ public sealed class CapabilityMatrixTests
         Assert.Equal(["compress", "crop"], Ids([FileFormat.Pdf, FileFormat.Mp4], WheelGroup.Tools));
         Assert.Contains("merge", Ids([FileFormat.Mp4, FileFormat.Mov], WheelGroup.Tools));
         Assert.Contains("merge", Ids([FileFormat.Mp3, FileFormat.Wav], WheelGroup.Tools));
-        Assert.Equal(["compress", "resize", "rotate", "crop", "annotate", "redact", "strip-metadata", "ocr", "extract-audio", "mute", "make-gif", "protect", "unlock", "merge"], Ids([], WheelGroup.Tools));
+        Assert.Equal(["compress", "resize", "rotate", "crop", "annotate", "redact", "trim", "strip-metadata", "ocr", "extract-audio", "mute", "make-gif", "protect", "unlock", "merge"], Ids([], WheelGroup.Tools));
     }
 
     [Fact]
     public void Video_gets_the_sound_and_picture_tools() =>
-        Assert.Equal(["compress", "rotate", "crop", "extract-audio", "mute", "make-gif"], Ids([FileFormat.Mp4], WheelGroup.Tools));
+        Assert.Equal(["compress", "rotate", "crop", "trim", "extract-audio", "mute", "make-gif"], Ids([FileFormat.Mp4], WheelGroup.Tools));
 
     [Fact]
     public void A_flip_preset_turns_nothing()
