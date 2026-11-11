@@ -4,6 +4,7 @@ using System.Windows;
 
 using Microsoft.Extensions.Logging;
 
+using Morph.App.Actions;
 using Morph.App.Merge;
 using Morph.App.Toasts;
 using Morph.App.Tools;
@@ -33,10 +34,11 @@ public sealed partial class App : Application
     private static volatile bool _canEncodeHeic;
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
-    // shortcut: static Actions wedges from the task 0.3 spike; they move into capabilities.json as they land (3.7, 3.8).
+    // The Actions wheel (FA-2): run by the App (ActionRunner), not capability rows, so they take folders too (FA-3). Float is 3.8.
     private static readonly WheelItem[] ActionItems =
     [
-        new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""), new("action.copy-path", "Copy path", ""),
+        new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""),
+        new("action.copy-path", "Copy path", "", Choices: [new("action.copy-path/unix", "Unix style", "")]),
         new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
     ];
 
@@ -59,6 +61,7 @@ public sealed partial class App : Application
     private TrayIcon? _tray;
     private ToastHost? _toasts;
     private DragWheelController? _wheel;
+    private ActionRunner? _actions;
     private GlobalHotkey? _hotkey;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -117,6 +120,7 @@ public sealed partial class App : Application
         _tray.QuitClicked += Shutdown;
         _tray.HistoryClicked += ShowHistory;
         _toasts = new ToastHost(Jobs, Dispatcher, _log);
+        _actions = new ActionRunner(_toasts, _toolSettings!, _log);
 
         _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
@@ -227,6 +231,12 @@ public sealed partial class App : Application
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
+        if (item.Id.StartsWith("action.", StringComparison.Ordinal) && files.Paths.Count > 0)
+        {
+            _actions!.Run(item.Id, files.Paths);
+            return;
+        }
+
         if (Matrix.Tool(ToolId(item)) is null || files.Paths.Count == 0)
         {
             _log.LogInformation("{Tool} isn't wired up yet", item.Id);

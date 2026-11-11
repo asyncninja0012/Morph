@@ -136,6 +136,7 @@ public sealed class DragWheelController : IDisposable
         }
 
         _files = files;
+        _group = new[] { ModifierKey.Shift, ModifierKey.Ctrl }.FirstOrDefault(g => _itemsFor(g, files).Count > 0, ModifierKey.Alt); // folders only: straight to Actions
         var (count, caption) = Describe(files);
         _wheel.SetContent(_itemsFor(_group, files), count, caption, _dark);
         Diagnostic?.Invoke($"keyboard wheel: {files.Count} file(s) {Elapsed()} after press");

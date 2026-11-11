@@ -19,7 +19,7 @@ public static class ExplorerSelection
     private static readonly Guid TopLevelBrowser = new("4C96BE40-915C-11CF-99D3-00AA004AE837"); // SID_STopLevelBrowser
 
     /// <summary>
-    /// Selected files that exist on disk (folders and virtual items such as Control Panel entries are left out); empty
+    /// Selected files and folders that exist on disk (virtual items such as Control Panel entries are left out); empty
     /// when the window isn't Explorer or the desktop, or nothing is selected. Runs on its own STA thread: Shell calls go
     /// out of process to Explorer, and the File.Exists checks are I/O.
     /// </summary>
@@ -88,7 +88,7 @@ public static class ExplorerSelection
             foreach (var item in view.SelectedItems())
             {
                 string path = item.Path;
-                if (File.Exists(path))
+                if (File.Exists(path) || Directory.Exists(path))
                 {
                     files.Add(path);
                 }

@@ -52,6 +52,10 @@ public sealed class ToastHost
         _groups.Add((group, Refresh));
     }
 
+    /// <summary>A failure that isn't a job's (the Actions wheel). Call on the UI thread.</summary>
+    public void ShowMessage(string title, string message) =>
+        Open().Render(new ToastView("", title, message, CanShowFolder: false, CanCopyDetails: false));
+
     private void OnUpdate(JobUpdate update)
     {
         foreach (var (group, refresh) in _groups.ToList())
