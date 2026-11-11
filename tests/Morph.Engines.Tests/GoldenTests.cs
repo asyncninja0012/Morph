@@ -499,6 +499,53 @@ public sealed class GoldenTests : IDisposable
         }
     }
 
+    public static TheoryData<string, string> RedactRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "redact"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-3: the box is solid black and the rest is as it was. Pictures: over the red square, info stripped. PDF: over page 1's
+    // line of text, which is gone from the file (page 2's stays); page 5 doesn't exist and is skipped.
+    [Theory]
+    [MemberData(nameof(RedactRows))]
+    public async Task Redact_row_blacks_out_the_box(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+        var pdf = engine == "pdf";
+        RedactBox[] boxes = pdf ? [new(1, 5, 95, 190, 30), new(5, 0, 0, 10, 10)] : [new(1, 20, 20, 30, 20)];
+
+        var output = Assert.Single((await RunAsync("redact", engine, [input], ct, Redactions.ToParameters(boxes))).Outputs);
+        Assert.Equal(Path.GetFileNameWithoutExtension(input) + "-redacted", Path.GetFileNameWithoutExtension(output));
+        using var image = pdf ? new MagickImage((await RenderAsync(output, ct))[0]) : new MagickImage(output);
+        var pixels = image.GetPixels();
+        var (inside, outside) = pdf ? ((100, 225), (60, 80)) : ((35, 30), (15, 15)); // PDF at 150 DPI: shown (48, 108) and the red box
+        var black = pixels.GetPixel(inside.Item1, inside.Item2)!.ToColor()!;
+        Assert.True(black.R < 30 && black.G < 30 && black.B < 30, $"inside the box is {black} on {from}");
+        var red = pixels.GetPixel(outside.Item1, outside.Item2)!.ToColor()!;
+        Assert.True(red.R > 200 && red.G < 60, $"outside the box is {red} on {from}");
+        if (pdf)
+        {
+            var text = Assert.Single((await RunAsync("convert.txt", engine, [output], ct)).Outputs);
+            var words = await File.ReadAllTextAsync(text, ct);
+            Assert.Contains("Morph sample page 2", words);
+            Assert.DoesNotContain("page 1", words);
+        }
+        else
+        {
+            Assert.Null(image.GetExifProfile());
+        }
+    }
+
     public static TheoryData<string, string> PasswordRows()
     {
         var rows = new TheoryData<string, string>();

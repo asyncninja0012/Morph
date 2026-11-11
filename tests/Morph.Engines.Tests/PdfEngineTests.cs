@@ -59,6 +59,72 @@ public sealed class PdfEngineTests : IDisposable
         Assert.True(centre.R > 200 && centre.G < 60 && centre.B < 60, $"centre is {centre}, not red");
     }
 
+    // ED-3: a redacted page's words are gone from the file, not covered: not in any object or stream (decoded), not in its
+    // note annotation, not in the tag tree, not in a form field on that page. The untouched page keeps its text.
+    [Fact]
+    public async Task Redact_leaves_none_of_the_page_in_the_file()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var input = Path.Combine(_dir, "secret.pdf");
+        using (var doc = new PdfDocument())
+        {
+            var font = new PdfDictionary(doc);
+            (font.Elements["/Type"], font.Elements["/Subtype"], font.Elements["/BaseFont"]) = (new PdfName("/Font"), new PdfName("/Type1"), new PdfName("/Helvetica"));
+            doc.Internals.AddObject(font);
+            foreach (var word in new[] { "SECRET123", "PUBLIC456" })
+            {
+                var page = doc.AddPage();
+                (page.Width, page.Height) = (PdfSharp.Drawing.XUnit.FromPoint(200), PdfSharp.Drawing.XUnit.FromPoint(100));
+                var resources = new PdfDictionary(doc);
+                resources.Elements["/Font"] = new PdfDictionary(doc) { Elements = { ["/F1"] = font.Reference! } };
+                page.Elements["/Resources"] = resources;
+                page.Contents.AppendContent().CreateStream(System.Text.Encoding.ASCII.GetBytes($"BT /F1 12 Tf 10 50 Td ({word}) Tj ET"));
+            }
+
+            var note = new PdfDictionary(doc);
+            (note.Elements["/Type"], note.Elements["/Subtype"]) = (new PdfName("/Annot"), new PdfName("/Text"));
+            note.Elements["/Rect"] = new PdfRectangle(new PdfSharp.Drawing.XPoint(0, 0), new PdfSharp.Drawing.XPoint(10, 10));
+            note.Elements["/Contents"] = new PdfString("SECRET123 note");
+            doc.Internals.AddObject(note);
+            var field = new PdfDictionary(doc);
+            (field.Elements["/Type"], field.Elements["/Subtype"], field.Elements["/FT"]) = (new PdfName("/Annot"), new PdfName("/Widget"), new PdfName("/Tx"));
+            field.Elements["/Rect"] = new PdfRectangle(new PdfSharp.Drawing.XPoint(0, 80), new PdfSharp.Drawing.XPoint(50, 95));
+            (field.Elements["/T"], field.Elements["/V"]) = (new PdfString("name"), new PdfString("SECRET123 field"));
+            doc.Internals.AddObject(field);
+            doc.Pages[0].Elements["/Annots"] = new PdfArray(doc, note.Reference!, field.Reference!);
+            doc.Internals.Catalog.Elements["/AcroForm"] = new PdfDictionary(doc) { Elements = { ["/Fields"] = new PdfArray(doc, field.Reference!) } };
+            var tags = new PdfDictionary(doc);
+            tags.Elements["/Type"] = new PdfName("/StructTreeRoot");
+            tags.Elements["/ActualText"] = new PdfString("SECRET123 tag");
+            doc.Internals.AddObject(tags);
+            doc.Internals.Catalog.Elements["/StructTreeRoot"] = tags.Reference!;
+            doc.Save(input);
+        }
+
+        var namer = new OutputNamer(_dir);
+        await new PdfEngine().RunAsync(new JobRequest(Guid.NewGuid(), "redact", "pdf", [input], _dir, Redactions.ToParameters([new RedactBox(1, 5, 30, 100, 30)])),
+            namer, new Progress<JobProgress>(), ct);
+        var redacted = Assert.Single(namer.CommitAll());
+
+        var everything = new System.Text.StringBuilder(System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(redacted, ct)));
+        using (var doc = PdfSharp.Pdf.IO.PdfReader.Open(redacted, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import))
+        {
+            Assert.Equal(2, doc.PageCount);
+            Assert.Equal((200.0, 100.0), (doc.Pages[0].Width.Point, doc.Pages[0].Height.Point));
+            foreach (var o in doc.Internals.GetAllObjects())
+            {
+                everything.Append(o.ToString());
+                if (o is PdfDictionary { Stream: { } stream })
+                {
+                    everything.Append(System.Text.Encoding.Latin1.GetString(stream.UnfilteredValue));
+                }
+            }
+        }
+
+        Assert.DoesNotContain("SECRET123", everything.ToString());
+        Assert.Contains("PUBLIC456", everything.ToString());
+    }
+
     // Marks are placed on the page as shown: on a page turned 90°, shown (10,10)-(40,40) is near the unrotated bottom-left.
     [Fact]
     public async Task Annotate_follows_a_rotated_page()

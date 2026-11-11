@@ -14,7 +14,7 @@ namespace Morph.Engines.Pdf;
 /// PDF → JPG/PNG (one image per page at 150 DPI) and PDF → TXT (CV-2) with PDFium. Tool ids: convert.jpg/png/txt.
 /// A multi-page PDF gives report-1.png, report-2.png, ... next to the original.
 /// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>. Crop sets page
-/// boxes (<see cref="PdfCrop"/>), annotate draws on pages (<see cref="PdfAnnotate"/>); preview is one page for the editors.
+/// boxes (<see cref="PdfCrop"/>), annotate draws on pages (<see cref="PdfAnnotate"/>), redact turns pages with boxes into pictures (<see cref="PdfRedact"/>); preview is one page for the editors.
 /// </summary>
 public sealed class PdfEngine : IEngine
 {
@@ -53,6 +53,12 @@ public sealed class PdfEngine : IEngine
         if (job.ToolId == "annotate")
         {
             PdfAnnotate.Run(job, namer, progress, ct);
+            return;
+        }
+
+        if (job.ToolId == "redact")
+        {
+            PdfRedact.Run(job, namer, progress, ct);
             return;
         }
 

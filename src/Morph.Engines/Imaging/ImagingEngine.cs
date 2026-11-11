@@ -9,7 +9,7 @@ namespace Morph.Engines.Imaging;
 
 /// <summary>
 /// Image ↔ image conversion (CV-2) with Magick.NET; HEIC output through Windows (<see cref="WicHeic"/>).
-/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate, strip-metadata (IT-1..3), crop (ED-1) and annotate (ED-2) keep
+/// Tool ids: convert.png/jpg/webp/heic/avif/tiff/gif/bmp; compress, resize, rotate, strip-metadata (IT-1..3), crop (ED-1), annotate (ED-2) and redact (ED-3) keep
 /// the format; preview feeds the editors.
 /// </summary>
 public sealed class ImagingEngine : IEngine
@@ -63,7 +63,7 @@ public sealed class ImagingEngine : IEngine
             return;
         }
 
-        if (job.ToolId is "rotate" or "strip-metadata" or "crop" or "annotate")
+        if (job.ToolId is "rotate" or "strip-metadata" or "crop" or "annotate" or "redact")
         {
             await EditAsync(job, namer, progress, ct).ConfigureAwait(false);
             return;
@@ -186,6 +186,7 @@ public sealed class ImagingEngine : IEngine
         var rotate = job.ToolId == "rotate";
         var (degrees, flip) = Presets.Rotate(job.Parameters);
         var shapes = job.ToolId == "annotate" ? Annotations.Parse(job.Parameters) : [];
+        var boxes = job.ToolId == "redact" ? Redactions.Parse(job.Parameters) : [];
         string? skipped = null;
         var made = 0;
         for (var i = 0; i < job.Inputs.Count; i++)
@@ -215,6 +216,14 @@ public sealed class ImagingEngine : IEngine
                     continue;
                 }
             }
+            else if (job.ToolId == "redact")
+            {
+                if (!Redact(image, boxes))
+                {
+                    skipped = $"{Path.GetFileName(input)} has only one page.";
+                    continue;
+                }
+            }
             else if (rotate)
             {
                 image.Rotate(degrees);
@@ -229,16 +238,10 @@ public sealed class ImagingEngine : IEngine
             }
             else
             {
-                foreach (var profile in new[] { "exif", "xmp", "iptc", "8bim" })
-                {
-                    image.RemoveProfile(profile);
-                }
-
-                image.RemoveAttribute("comment");
-                image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time"); // Magick's own date:create/modify text
+                StripInfo(image);
             }
 
-            var pending = namer.Reserve(input, Path.GetExtension(input), job.ToolId switch { "rotate" => "-rotated", "crop" => "-cropped", "annotate" => "-annotated", _ => "-stripped" });
+            var pending = namer.Reserve(input, Path.GetExtension(input), job.ToolId switch { "rotate" => "-rotated", "crop" => "-cropped", "annotate" => "-annotated", "redact" => "-redacted", _ => "-stripped" });
             await File.WriteAllBytesAsync(pending.Path, image.ToByteArray(format), ct).ConfigureAwait(false);
             made++;
             progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
@@ -248,6 +251,41 @@ public sealed class ImagingEngine : IEngine
         {
             throw new EngineException(skipped!);
         }
+    }
+
+    private static void StripInfo(MagickImage image)
+    {
+        foreach (var profile in new[] { "exif", "xmp", "iptc", "8bim" })
+        {
+            image.RemoveProfile(profile);
+        }
+
+        image.RemoveAttribute("comment");
+        image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time"); // Magick's own date:create/modify text
+    }
+
+    // Solid black over each page-1 box; the info goes too, as EXIF can hold an unredacted thumbnail. False: no box on page 1.
+    private static bool Redact(MagickImage image, IReadOnlyList<RedactBox> boxes)
+    {
+        var drawn = false;
+        foreach (var b in boxes.Where(b => b.Page == 1))
+        {
+            // Whole pixels, every one the box touches, opaque (no anti-aliased edge letting a sliver through).
+            var left = (int)Math.Clamp(Math.Floor(b.X), 0, image.Width);
+            var top = (int)Math.Clamp(Math.Floor(b.Y), 0, image.Height);
+            var right = (int)Math.Clamp(Math.Ceiling(b.X + b.W), 0, image.Width);
+            var bottom = (int)Math.Clamp(Math.Ceiling(b.Y + b.H), 0, image.Height);
+            if (right > left && bottom > top)
+            {
+                using var black = new MagickImage(MagickColors.Black, (uint)(right - left), (uint)(bottom - top));
+                image.Composite(black, left, top, CompositeOperator.Copy);
+            }
+
+            drawn = true;
+        }
+
+        StripInfo(image);
+        return drawn;
     }
 
     // Steps quality down at full size (or the size the Compress window chose), then shrinks the picture at the lowest quality.

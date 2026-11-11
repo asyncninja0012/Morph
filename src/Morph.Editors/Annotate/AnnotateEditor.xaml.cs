@@ -18,6 +18,7 @@ namespace Morph.Editors.Annotate;
 /// colour and line width; undo and redo. Mouse: drag to draw, click to type (Text). Keyboard: letters pick the tool, Space adds
 /// a mark in the middle, arrows move the newest mark on the page, Shift+arrows resize it, Delete removes it, Page Up/Down turn
 /// PDF pages. Returns <see cref="Annotations"/> parameters; remembers the tool, colour and width.
+/// Redact (ED-3) is the same editor with one tool, a solid black box, and no choices; it returns <see cref="Redactions"/>.
 /// </summary>
 public sealed partial class AnnotateEditor : UserControl, IEditor
 {
@@ -34,6 +35,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
     private static readonly (string Id, string Label, double Dips)[] StrokeList = [("thin", "Thin", 2), ("medium", "Medium", 4), ("thick", "Thick", 8)];
 
     private readonly PreviewLoader _load;
+    private readonly bool _redact;
     private readonly Stack<List<AnnotationShape>> _undo = new();
     private readonly Stack<List<AnnotationShape>> _redo = new();
     private List<AnnotationShape> _shapes = [];
@@ -54,10 +56,14 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
     private string _color = ColorList[0].Hex;
     private string _stroke = "medium";
 
-    public AnnotateEditor(PreviewLoader load)
+    public AnnotateEditor(PreviewLoader load, bool redact = false)
     {
         InitializeComponent();
-        _load = load;
+        (_load, _redact) = (load, redact);
+        if (redact)
+        {
+            (Tools.Visibility, ColorChips.Visibility, Strokes.Visibility, Hint.Visibility) = (Visibility.Collapsed, Visibility.Collapsed, Visibility.Collapsed, Visibility.Visible);
+        }
         foreach (var (id, label, key) in ToolList)
         {
             Tools.Children.Add(Chip(label, id, "AnnotateTool", $"{label} ({key})", () => _tool = id));
@@ -94,7 +100,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         };
     }
 
-    public string Title => "Annotate";
+    public string Title => _redact ? "Redact" : "Annotate";
 
     public FrameworkElement View => this;
 
@@ -116,6 +122,14 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         _color = (string?)settings?["color"] is { } color && ColorList.Any(c => c.Hex == color) ? color : ColorList[0].Hex;
         _stroke = (string?)settings?["stroke"] is { } stroke && StrokeList.Any(s => s.Id == stroke) ? stroke : "medium";
         Tools.Children.OfType<RadioButton>().Last().Visibility = _pdf ? Visibility.Collapsed : Visibility.Visible; // pixelate: Redact hides PDF content
+        if (_redact)
+        {
+            _tool = "redact";
+            Hint.Text = _pdf
+                ? "Drag a box over anything to hide. Pages with a box are saved as pictures, so nothing under the boxes stays in the file (text on those pages can't be selected any more)."
+                : "Drag a box over anything to hide. The photo's info (location, camera, date) is removed too.";
+        }
+
         CheckChips();
         await ShowPageAsync(1, ++_loads);
         Changed?.Invoke(this, EventArgs.Empty);
@@ -133,10 +147,16 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
     public JsonObject Parameters()
     {
         CloseText(commit: true);
-        return Annotations.ToParameters(_shapes);
+        return _redact
+            ? Redactions.ToParameters(_shapes.Select(s =>
+            {
+                var (x, y, w, h) = Annotations.Box(s);
+                return new RedactBox(s.Page, x, y, w, h);
+            }))
+            : Annotations.ToParameters(_shapes);
     }
 
-    public JsonObject Settings() => new() { ["tool"] = _tool, ["color"] = _color, ["stroke"] = _stroke };
+    public JsonObject Settings() => _redact ? [] : new() { ["tool"] = _tool, ["color"] = _color, ["stroke"] = _stroke };
 
     private RadioButton Chip(object content, string id, string group, string tip, Action pick)
     {
@@ -340,7 +360,7 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         {
             Turn(_page + (e.Key == Key.PageDown ? 1 : -1));
         }
-        else if (mods == ModifierKeys.None && ToolList.FirstOrDefault(t => t.Key == e.Key) is { Id: { } id } && !(_pdf && id == "pixelate"))
+        else if (mods == ModifierKeys.None && !_redact && ToolList.FirstOrDefault(t => t.Key == e.Key) is { Id: { } id } && !(_pdf && id == "pixelate"))
         {
             _tool = id;
             CheckChips();
@@ -491,6 +511,12 @@ public sealed partial class AnnotateEditor : UserControl, IEditor
         {
             case "rect":
                 yield return Stroked(new RectangleGeometry(new Rect(x, y, w, h)), brush, shape.Stroke);
+                break;
+            case "redact":
+                var cover = new Rectangle { Width = w, Height = h, Fill = Brushes.Black };
+                Canvas.SetLeft(cover, x);
+                Canvas.SetTop(cover, y);
+                yield return cover;
                 break;
             case "ellipse":
                 yield return Stroked(new EllipseGeometry(new Rect(x, y, w, h)), brush, shape.Stroke);

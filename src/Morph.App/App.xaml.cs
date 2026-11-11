@@ -96,6 +96,7 @@ public sealed partial class App : Application
 
         _editors["crop"] = () => new CropEditor((path, page, ct) => PreviewAsync("crop", path, page, ct));
         _editors["annotate"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("annotate", path, page, ct));
+        _editors["redact"] = () => new AnnotateEditor((path, page, ct) => PreviewAsync("redact", path, page, ct), redact: true);
 
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;

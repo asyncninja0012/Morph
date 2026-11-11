@@ -5,6 +5,8 @@
     <DockPanel>
         <!-- One row per choice, stacked, so the window grows down rather than wide (the shell sizes to its content). -->
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock x:Name="Hint" Visibility="Collapsed" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" Margin="0,0,0,6"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <StackPanel x:Name="Tools" Orientation="Horizontal" Margin="0,0,0,6" AutomationProperties.Name="Tool" KeyboardNavigation.DirectionalNavigation="Cycle" />
             <StackPanel x:Name="ColorChips" Orientation="Horizontal" Margin="0,0,0,6" AutomationProperties.Name="Colour" KeyboardNavigation.DirectionalNavigation="Cycle" />
             <DockPanel>
