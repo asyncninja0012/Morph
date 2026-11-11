@@ -11,7 +11,7 @@ namespace Morph.App.Tray;
 
 /// <summary>
 /// The tray's job history (JB-6): the last 50 drops, newest first, with Cancel while running, Show in folder, and Undo for
-/// 10 minutes (JB-5). Rows are built once per entry and updated in place, so focus and hover survive progress updates.
+/// 10 minutes (JB-5), and Float to park the outputs on the Float shelf (FA-1). Rows are built once per entry and updated in place, so focus and hover survive progress updates.
 /// </summary>
 public sealed partial class HistoryWindow : Window
 {
@@ -33,6 +33,8 @@ public sealed partial class HistoryWindow : Window
     }
 
     public event Action<JobHistoryEntry>? UndoClicked;
+
+    public event Action<IReadOnlyList<string>>? FloatClicked;
 
     /// <summary>Call on the UI thread after the history changes.</summary>
     public void Refresh()
@@ -77,6 +79,7 @@ public sealed partial class HistoryWindow : Window
         private readonly Button _cancel = new() { Content = "Cancel" };
         private readonly Button _folder = new() { Content = "Show in folder", Margin = new Thickness(8, 0, 0, 0) };
         private readonly Button _undo = new() { Content = "Undo", Margin = new Thickness(8, 0, 0, 0) };
+        private readonly Button _float = new() { Content = "Float", Margin = new Thickness(8, 0, 0, 0), ToolTip = "Park the output on the Float shelf" };
 
         public Row(JobHistoryEntry entry, HistoryWindow window)
         {
@@ -93,12 +96,15 @@ public sealed partial class HistoryWindow : Window
             _cancel.Click += (_, _) => entry.Group.Cancel();
             _folder.Click += (_, _) => ToastHost.ShowInFolder(entry.Group.Outputs);
             _undo.Click += (_, _) => window.UndoClicked?.Invoke(entry);
+            _float.Click += (_, _) => window.FloatClicked?.Invoke(entry.Group.Outputs);
+            System.Windows.Automation.AutomationProperties.SetName(_float, $"Float {title.Text}");
             System.Windows.Automation.AutomationProperties.SetName(_undo, $"Undo {title.Text}");
             System.Windows.Automation.AutomationProperties.SetName(_cancel, $"Cancel {title.Text}");
 
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
             buttons.Children.Add(_cancel);
             buttons.Children.Add(_folder);
+            buttons.Children.Add(_float);
             buttons.Children.Add(_undo);
             var stack = new StackPanel();
             stack.Children.Add(title);
@@ -123,6 +129,7 @@ public sealed partial class HistoryWindow : Window
             _bar.Value = double.IsNaN(group.Fraction) ? 0 : group.Fraction;
             _cancel.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
             _folder.Visibility = !running && !_entry.Undone && group.Outputs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            _float.Visibility = _folder.Visibility;
             _undo.Visibility = canUndo ? Visibility.Visible : Visibility.Collapsed;
         }
     }

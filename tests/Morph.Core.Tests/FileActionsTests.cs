@@ -22,6 +22,17 @@ public sealed class FileActionsTests
         Assert.Equal([@"Z:\new", @"C:\a", @"D:\b\", @"E:\c", @"F:\d", @"G:\e"], FileActions.AddRecent(recent, @"Z:\new"));
     }
 
+    [Fact]
+    public void Float_keeps_one_of_each_newest_last()
+    {
+        string[] shelf = [@"C:\a.txt", @"C:\b\", @"C:\c.png"];
+
+        Assert.Equal([@"C:\a.txt", @"C:\c.png", @"c:\B", @"D:\d.pdf"], FileActions.AddToFloat(shelf, [@"c:\B", @"D:\d.pdf", @"D:\d.pdf"]));
+        var full = FileActions.AddToFloat([.. Enumerable.Range(0, FileActions.FloatCount).Select(i => $@"C:\{i}")], [@"C:\new"]);
+        Assert.Equal(FileActions.FloatCount, full.Count);
+        Assert.Equal((@"C:\1", @"C:\new"), (full[0], full[^1]));
+    }
+
     [Theory]
     [InlineData(@"C:\Users\me", true)]
     [InlineData(@"C:\a;b", false)]

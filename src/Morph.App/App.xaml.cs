@@ -5,6 +5,7 @@ using System.Windows;
 using Microsoft.Extensions.Logging;
 
 using Morph.App.Actions;
+using Morph.App.Float;
 using Morph.App.Merge;
 using Morph.App.Toasts;
 using Morph.App.Tools;
@@ -34,7 +35,7 @@ public sealed partial class App : Application
     private static volatile bool _canEncodeHeic;
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
 
-    // The Actions wheel (FA-2): run by the App (ActionRunner), not capability rows, so they take folders too (FA-3). Float is 3.8.
+    // The Actions wheel (FA-2): run by the App (ActionRunner, FloatShelf), not capability rows, so they take folders too (FA-3).
     private static readonly WheelItem[] ActionItems =
     [
         new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""),
@@ -62,6 +63,7 @@ public sealed partial class App : Application
     private ToastHost? _toasts;
     private DragWheelController? _wheel;
     private ActionRunner? _actions;
+    private FloatShelf? _float;
     private GlobalHotkey? _hotkey;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -119,8 +121,11 @@ public sealed partial class App : Application
         _tray.OpenLogsClicked += () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_logs.Directory}\"") { UseShellExecute = false })?.Dispose();
         _tray.QuitClicked += Shutdown;
         _tray.HistoryClicked += ShowHistory;
+        _tray.FloatClicked += () => _float!.Toggle();
         _toasts = new ToastHost(Jobs, Dispatcher, _log);
         _actions = new ActionRunner(_toasts, _toolSettings!, _log);
+        _float = new FloatShelf(_toolSettings!, _log);
+        _ = _float.LoadAsync();
 
         _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
         _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
@@ -231,6 +236,12 @@ public sealed partial class App : Application
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
+        if (item.Id == "action.float" && files.Paths.Count > 0)
+        {
+            _float!.Add(files.Paths);
+            return;
+        }
+
         if (item.Id.StartsWith("action.", StringComparison.Ordinal) && files.Paths.Count > 0)
         {
             _actions!.Run(item.Id, files.Paths);
@@ -467,6 +478,7 @@ public sealed partial class App : Application
         {
             _historyWindow = new HistoryWindow(_history);
             _historyWindow.UndoClicked += UndoAsync;
+            _historyWindow.FloatClicked += outputs => _float!.Add(outputs);
             _historyWindow.Closed += (_, _) => _historyWindow = null;
             _historyWindow.Show();
         }

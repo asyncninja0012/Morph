@@ -10,7 +10,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace Morph.App.Tray;
 
 /// <summary>
-/// Morph's notification-area icon: a click opens the job history; the menu has Job history, Open logs folder and Quit. Shell_NotifyIcon through CsWin32 rather than WinForms
+/// Morph's notification-area icon: a click opens the job history; the menu has Job history, Float shelf, Open logs folder and Quit. Shell_NotifyIcon through CsWin32 rather than WinForms
 /// NotifyIcon: WinForms would add ~13 MB to an MSIX that is already over its size budget (PLAN R3).
 /// </summary>
 internal sealed class TrayIcon : IDisposable
@@ -19,6 +19,7 @@ internal sealed class TrayIcon : IDisposable
     private const uint OpenLogsCommand = 1;
     private const uint QuitCommand = 2;
     private const uint HistoryCommand = 3;
+    private const uint FloatCommand = 4;
     private const uint NinKeySelect = PInvoke.NIN_SELECT | 0x1; // NIN_SELECT | NINF_KEY; not in the CsWin32 metadata
 
     private readonly HwndSource _window;
@@ -47,6 +48,8 @@ internal sealed class TrayIcon : IDisposable
     }
 
     public event Action? HistoryClicked;
+
+    public event Action? FloatClicked;
 
     public event Action? OpenLogsClicked;
 
@@ -120,6 +123,7 @@ internal sealed class TrayIcon : IDisposable
         try
         {
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, HistoryCommand, "Job history");
+            Append(menu, MENU_ITEM_FLAGS.MF_STRING, FloatCommand, "Float shelf");
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, OpenLogsCommand, "Open logs folder");
             Append(menu, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, null);
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, QuitCommand, "Quit Morph");
@@ -136,6 +140,9 @@ internal sealed class TrayIcon : IDisposable
             {
                 case HistoryCommand:
                     HistoryClicked?.Invoke();
+                    break;
+                case FloatCommand:
+                    FloatClicked?.Invoke();
                     break;
                 case OpenLogsCommand:
                     OpenLogsClicked?.Invoke();
