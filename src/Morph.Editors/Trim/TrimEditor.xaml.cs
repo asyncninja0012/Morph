@@ -123,7 +123,7 @@ public sealed partial class TrimEditor : UserControl, IEditor
         if (_video)
         {
             var aspect = strip.SourceWidth / strip.SourceHeight;
-            var height = Math.Min(width / aspect, Math.Max(120, work.Height * 0.8 - 330));
+            var height = Math.Min(width / aspect, Math.Max(120, work.Height * 0.8 - 430));
             (Screen.Width, Screen.Height) = (Math.Min(width, height * aspect), height);
         }
         else
