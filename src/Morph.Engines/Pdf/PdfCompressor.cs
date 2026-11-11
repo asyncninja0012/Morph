@@ -81,7 +81,7 @@ internal static class PdfCompressor
         document.Save(output);
     }
 
-    internal static PdfDocument Open(string input)
+    internal static PdfDocument Open(string input, PdfDocumentOpenMode mode = PdfDocumentOpenMode.Modify)
     {
         var name = Path.GetFileName(input);
         var locked = false;
@@ -89,7 +89,7 @@ internal static class PdfCompressor
         try
         {
             // An aborted password prompt makes Open return null.
-            document = PdfReader.Open(input, PdfDocumentOpenMode.Modify, args =>
+            document = PdfReader.Open(input, mode, args =>
             {
                 locked = true;
                 args.Abort = true;

@@ -14,7 +14,7 @@ namespace Morph.Engines.Pdf;
 /// PDF → JPG/PNG (one image per page at 150 DPI) and PDF → TXT (CV-2) with PDFium. Tool ids: convert.jpg/png/txt.
 /// A multi-page PDF gives report-1.png, report-2.png, ... next to the original.
 /// Images → PDF (convert.pdf) and merge PDFs and images (merge) with PDFsharp, see <see cref="PdfBuilder"/>. Crop sets page
-/// boxes (<see cref="PdfCrop"/>), annotate draws on pages (<see cref="PdfAnnotate"/>), redact turns pages with boxes into pictures (<see cref="PdfRedact"/>); preview is one page for the editors.
+/// boxes (<see cref="PdfCrop"/>), annotate draws on pages (<see cref="PdfAnnotate"/>), redact turns pages with boxes into pictures (<see cref="PdfRedact"/>), organize reorders, turns, drops and splits pages (<see cref="PdfOrganize"/>); preview is one page for the editors.
 /// </summary>
 public sealed class PdfEngine : IEngine
 {
@@ -53,6 +53,12 @@ public sealed class PdfEngine : IEngine
         if (job.ToolId == "annotate")
         {
             PdfAnnotate.Run(job, namer, progress, ct);
+            return;
+        }
+
+        if (job.ToolId == "organize")
+        {
+            PdfOrganize.Run(job, namer, progress, ct);
             return;
         }
 
@@ -182,6 +188,12 @@ public sealed class PdfEngine : IEngine
             throw new EngineException($"{Path.GetFileName(input)} isn't a PDF.");
         }
 
+        if (job.Parameters?["sheet"] is { } sheet)
+        {
+            await SheetAsync(job, input, sheet.GetValue<int>(), namer, ct).ConfigureAwait(false);
+            return;
+        }
+
         MagickImage image;
         double widthPt, heightPt;
         int pages;
@@ -217,6 +229,54 @@ public sealed class PdfEngine : IEngine
         using (image)
         {
             await Preview.WriteAsync(image, widthPt, heightPt, job, namer, ct, pages).ConfigureAwait(false);
+        }
+    }
+
+    // The page organizer's thumbnails (PageSheet): pages from `first`, each fitted and centred in its cell; a damaged page stays empty.
+    private static async Task SheetAsync(JobRequest job, string input, int first, OutputNamer namer, CancellationToken ct)
+    {
+        MagickImage canvas;
+        int pages;
+        lock (Pdfium.Sync)
+        {
+            (var doc, pages) = Open(input);
+            try
+            {
+                first = Math.Clamp(first, 1, pages);
+                var count = Math.Min(PageSheet.Batch, pages - first + 1);
+                var rows = (count + PageSheet.Columns - 1) / PageSheet.Columns;
+                canvas = new MagickImage(MagickColors.Transparent, PageSheet.Columns * PageSheet.Cell, (uint)(rows * PageSheet.Cell));
+                for (var i = 0; i < count; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var page = Pdfium.FPDF_LoadPage(doc, first - 1 + i);
+                    if (page == 0)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var longest = Math.Max(1, Math.Max(Pdfium.FPDF_GetPageWidthF(page), Pdfium.FPDF_GetPageHeightF(page)));
+                        using var thumb = RenderImage(page, 72.0 * PageSheet.Cell / longest);
+                        canvas.Composite(thumb, (i % PageSheet.Columns * PageSheet.Cell) + Math.Max(0, (PageSheet.Cell - (int)thumb.Width) / 2),
+                            (i / PageSheet.Columns * PageSheet.Cell) + Math.Max(0, (PageSheet.Cell - (int)thumb.Height) / 2), CompositeOperator.Over);
+                    }
+                    finally
+                    {
+                        Pdfium.FPDF_ClosePage(page);
+                    }
+                }
+            }
+            finally
+            {
+                Pdfium.FPDF_CloseDocument(doc);
+            }
+        }
+
+        using (canvas)
+        {
+            await Preview.WriteAsync(canvas, PageSheet.Cell, PageSheet.Cell, job, namer, ct, pages).ConfigureAwait(false);
         }
     }
 

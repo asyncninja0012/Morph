@@ -8,6 +8,9 @@ namespace Morph.Editors;
 /// <summary>Gets the Worker's preview of a file's <paramref name="page"/> (1-based; PDF only), so the App never decodes dropped files itself.</summary>
 public delegate Task<PreviewImage> PreviewLoader(string path, int page, CancellationToken ct);
 
+/// <summary>Gets the Worker's thumbnails of a PDF's pages from <paramref name="first"/> (1-based) as one <see cref="PageSheet"/> grid.</summary>
+public delegate Task<PreviewImage> PageSheetLoader(string path, int first, CancellationToken ct);
+
 /// <summary>
 /// Gets the Worker's timeline picture of a video (as many frames as fill a strip of <paramref name="shape"/>, width ÷ height) or
 /// sound file (its waveform), with its length.

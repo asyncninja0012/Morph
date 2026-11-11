@@ -627,6 +627,42 @@ public sealed class GoldenTests : IDisposable
         Assert.InRange(probe.Duration, 0.9, 1.1);
     }
 
+    // ED-5 on sample.pdf (two 216×144 pt pages): the thumbnail sheet holds both pages in 120 px cells and says how many pages
+    // there are; page 2 turned + page 1 gives one file in that order with the first page upright-tall; a split after page 1
+    // gives two one-page files; the same order as the original is skipped.
+    [Fact]
+    public async Task Organize_reorders_turns_and_splits_pages()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var input = Path.Combine(_dir, "sample.pdf");
+        File.Copy(Path.Combine(Fixtures, "sample.pdf"), input);
+        Assert.Contains(Matrix.Rows, r => r.In == "pdf" && r.Tool == "organize" && r.Engine == "pdf");
+
+        var sheetPath = Assert.Single((await RunAsync(PreviewFile.ToolId, "pdf", [input], ct, new() { ["sheet"] = 1 })).Outputs);
+        var sheet = await PreviewFile.ReadAsync(sheetPath, ct);
+        File.Delete(sheetPath);
+        Assert.Equal((PageSheet.Columns * PageSheet.Cell, PageSheet.Cell, 2), (sheet.Width, sheet.Height, sheet.Pages));
+        byte Alpha(int x, int y) => sheet.Bgra[(y * sheet.Width + x) * 4 + 3];
+        Assert.Equal((255, 255, 0, 0), (Alpha(60, 60), Alpha(180, 60), Alpha(300, 60), Alpha(60, 5))); // pages fill their width, not their height
+
+        var organized = Assert.Single((await RunAsync("organize", "pdf", [input], ct, PageOrder.ToParameters([new(2, 90), new(1)]))).Outputs);
+        Assert.Equal("sample-organized.pdf", Path.GetFileName(organized));
+        var words = await File.ReadAllTextAsync(Assert.Single((await RunAsync("convert.txt", "pdf", [organized], ct)).Outputs), ct);
+        Assert.True(words.IndexOf("page 2", StringComparison.Ordinal) is >= 0 and var two && two < words.IndexOf("page 1", StringComparison.Ordinal), words);
+        var pages = await RenderAsync(organized, ct);
+        using (var turned = new MagickImage(pages[0]))
+        using (var upright = new MagickImage(pages[1]))
+        {
+            Assert.Equal((300u, 450u, 450u, 300u), (turned.Width, turned.Height, upright.Width, upright.Height));
+        }
+
+        var parts = (await RunAsync("organize", "pdf", [input], ct, PageOrder.ToParameters([new(1, SplitAfter: true), new(2)]))).Outputs;
+        Assert.Equal(["sample-part1.pdf", "sample-part2.pdf"], parts.Select(Path.GetFileName));
+
+        var same = await WorkerClient.RunAsync(WorkerPath, new JobRequest(Guid.NewGuid(), "organize", "pdf", [input], _dir, PageOrder.ToParameters([new(1), new(2)])), null, ct);
+        Assert.Equal((JobStatus.Failed, "sample.pdf is already in that order."), (same.Status, same.UserMessage));
+    }
+
     public static TheoryData<string, string> PasswordRows()
     {
         var rows = new TheoryData<string, string>();

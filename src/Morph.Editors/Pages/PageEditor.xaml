@@ -1,0 +1,26 @@
+<UserControl x:Class="Morph.Editors.Pages.PageEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="True" IsTabStop="False" FocusVisualStyle="{x:Null}">
+    <StackPanel>
+        <WrapPanel Margin="0,0,0,8">
+            <Button x:Name="TurnLeftButton" Content="Turn left" ToolTip="L" Margin="0,0,4,4" />
+            <Button x:Name="TurnRightButton" Content="Turn right" ToolTip="R" Margin="0,0,4,4" />
+            <Button x:Name="DeleteButton" Content="Delete" ToolTip="Delete" Margin="0,0,4,4" />
+            <Button x:Name="KeepButton" Content="Keep only these" ToolTip="K" Margin="0,0,4,4" />
+            <Button x:Name="SplitButton" Content="Split after" ToolTip="S: start a new file after this page" Margin="0,0,4,4" />
+        </WrapPanel>
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <Grid>
+                <WrapPanel x:Name="Tiles" Background="Transparent" Focusable="True" FocusVisualStyle="{x:Null}"
+                           AutomationProperties.Name="Pages. Arrow keys move, Shift with arrows selects, Ctrl with arrows moves the selected pages, R and L turn them, Delete removes them, K keeps only them, S splits after." />
+                <Canvas IsHitTestVisible="False">
+                    <Rectangle x:Name="DropMark" Width="4" Visibility="Collapsed" RadiusX="2" RadiusY="2" />
+                </Canvas>
+            </Grid>
+        </ScrollViewer>
+        <TextBlock x:Name="Summary" Margin="0,8,0,0" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+        <TextBlock x:Name="Hint" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Text="Drag pages to move them; Ctrl or Shift click picks several. Bookmarks, links and form fields don't carry over." />
+    </StackPanel>
+</UserControl>
