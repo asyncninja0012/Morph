@@ -18,8 +18,18 @@ public sealed record PackInfo(string Id, string Name, string Version, Uri Url, l
 /// </summary>
 public sealed class PackStore(string root, HttpMessageHandler? handler = null)
 {
-    /// <summary>The packs Morph knows. shortcut: empty until the office (4.2) and bg-model (4.3) ZIPs are published.</summary>
-    public static IReadOnlyList<PackInfo> Known { get; } = [];
+    /// <summary>The packs Morph knows: ZIPs on the repo's pack-&lt;id&gt;-&lt;version&gt; releases, printed by build/make-*-pack.ps1.</summary>
+    public static IReadOnlyList<PackInfo> Known { get; } =
+    [
+        new("office", "Office pack (LibreOffice)", "26.8.2",
+            new("https://github.com/asyncninja0012/Morph/releases/download/pack-office-26.8.2/office-26.8.2.zip"), 512384302,
+            1581536517, "7A637683F8A15FF24D7E6BC7E293483D954074AAB0A2516886BE4A6730A3DA3C",
+            new("https://www.libreoffice.org/about-us/licenses/")),
+        new("bg-model", "Background pack", "1",
+            new("https://github.com/asyncninja0012/Morph/releases/download/pack-bg-model-1/bg-model-1.zip"), 171112434,
+            209476323, "EFA243A2D3552F1A3507D2A90912256DB78EBF230C0BEED3154E930199B917CD",
+            new("https://github.com/ZhengPeng7/BiRefNet/blob/main/LICENSE")),
+    ];
 
     private readonly Lazy<HttpClient> _http = new(() => handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false));
 
