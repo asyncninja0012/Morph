@@ -641,6 +641,7 @@ public sealed partial class App : Application
         _onboarding.Closed += async (_, _) =>
         {
             _onboarding = null;
+            _dragGestures.AllowedOwnWindow = 0;
             try
             {
                 await (await _toolSettings!).SetAsync(OnboardingId, new() { ["done"] = true }, CancellationToken.None);
@@ -651,6 +652,7 @@ public sealed partial class App : Application
             }
         };
         _onboarding.Show();
+        _dragGestures.AllowedOwnWindow = new System.Windows.Interop.WindowInteropHelper(_onboarding).Handle; // its drags open the wheel
         _onboarding.Activate();
     }
 

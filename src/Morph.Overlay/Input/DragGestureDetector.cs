@@ -43,6 +43,18 @@ public sealed class DragGestureDetector : IDisposable
         set => _suppressEscape = value;
     }
 
+    /// <summary>
+    /// One of Morph's own windows whose drags still open the wheel (the first-run tour); 0 = none. Drags in every other Morph
+    /// window are ignored (editors, Float shelf). Set from the UI thread.
+    /// </summary>
+    public nint AllowedOwnWindow
+    {
+        get => (nint)Interlocked.Read(ref _allowedOwnWindow);
+        set => Interlocked.Exchange(ref _allowedOwnWindow, value);
+    }
+
+    private long _allowedOwnWindow;
+
     /// <summary>Starts the input thread; completes once raw input is registered.</summary>
     public Task StartAsync()
     {
@@ -168,12 +180,13 @@ public sealed class DragGestureDetector : IDisposable
         }
     }
 
-    /// <summary>Our own windows are in the foreground, or the cursor is hidden (games, video players).</summary>
-    private static unsafe bool IsIgnoredContext()
+    /// <summary>Our own windows are in the foreground (except <see cref="AllowedOwnWindow"/>), or the cursor is hidden (games, video players).</summary>
+    private unsafe bool IsIgnoredContext()
     {
         uint pid;
-        PInvoke.GetWindowThreadProcessId(PInvoke.GetForegroundWindow(), &pid);
-        if (pid == (uint)Environment.ProcessId)
+        var foreground = PInvoke.GetForegroundWindow();
+        PInvoke.GetWindowThreadProcessId(foreground, &pid);
+        if (pid == (uint)Environment.ProcessId && (nint)foreground != AllowedOwnWindow)
         {
             return true;
         }
