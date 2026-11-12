@@ -1,0 +1,32 @@
+<UserControl x:Class="Morph.Editors.Frames.FramesEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="True" IsTabStop="False" FocusVisualStyle="{x:Null}">
+    <StackPanel>
+        <!-- The player shows only the Worker's Morph-made copy (PlaybackLoader), never the dropped file. -->
+        <Grid x:Name="Screen" Background="Black" HorizontalAlignment="Center" Margin="0,0,0,10">
+            <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Close" ScrubbingEnabled="True" Stretch="Uniform" IsMuted="False" />
+            <TextBlock x:Name="ScreenText" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" Margin="16" AutomationProperties.LiveSetting="Polite" />
+        </Grid>
+        <Grid x:Name="Timeline" Height="56" Background="#40000000" ClipToBounds="True" Cursor="Hand" Focusable="True" HorizontalAlignment="Center"
+              AutomationProperties.Name="Timeline. Space plays, arrow keys step one frame (Shift: one second), A adds the frame, Delete removes it.">
+            <Image x:Name="Strip" Stretch="Fill" />
+            <Canvas x:Name="Marks" IsHitTestVisible="False" />
+        </Grid>
+        <DockPanel Margin="0,8,0,0">
+            <Button x:Name="PlayButton" Content="Play" ToolTip="Space" MinWidth="72" IsEnabled="False" Margin="0,0,4,0" />
+            <Button x:Name="BackButton" Content="&#xE76B;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" ToolTip="One frame back (←)"
+                    AutomationProperties.Name="One frame back" Margin="0,0,4,0" />
+            <Button x:Name="ForwardButton" Content="&#xE76C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" ToolTip="One frame forward (→)"
+                    AutomationProperties.Name="One frame forward" />
+            <Button x:Name="AddButton" DockPanel.Dock="Right" Content="Add frame" ToolTip="A" Style="{DynamicResource AccentButtonStyle}" MinWidth="96" />
+            <TextBlock x:Name="TimeText" VerticalAlignment="Center" Margin="12,0" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
+        <TextBlock x:Name="FramesLabel" Text="Frames to save" FontWeight="SemiBold" Margin="0,14,0,6" />
+        <ScrollViewer x:Name="TrayScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="Tray" Orientation="Horizontal" AutomationProperties.LabeledBy="{Binding ElementName=FramesLabel}" />
+        </ScrollViewer>
+        <TextBlock x:Name="Summary" Margin="0,8,0,0" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+</UserControl>

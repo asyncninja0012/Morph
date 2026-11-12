@@ -12,7 +12,7 @@ namespace Morph.Engines;
 /// </summary>
 internal static class Preview
 {
-    public static async Task WriteAsync(MagickImage image, double sourceWidth, double sourceHeight, JobRequest job, OutputNamer namer, CancellationToken ct, int pages = 1, double duration = 0)
+    public static async Task WriteAsync(MagickImage image, double sourceWidth, double sourceHeight, JobRequest job, OutputNamer namer, CancellationToken ct, int pages = 1, double duration = 0, double frameRate = 0)
     {
         var maxEdge = (uint)Math.Clamp(job.Parameters?["maxEdge"]?.GetValue<int>() ?? 2048, 64, PreviewFile.MaxEdge);
         if (image.Width > maxEdge || image.Height > maxEdge)
@@ -28,6 +28,6 @@ internal static class Preview
         using var pixels = image.GetPixelsUnsafe();
         var bgra = pixels.ToByteArray(PixelMapping.BGRA) ?? throw new InvalidOperationException("Magick gave no pixels.");
         var pending = namer.Reserve(job.Inputs[0], ".preview");
-        await PreviewFile.WriteAsync(pending.Path, new PreviewImage((int)image.Width, (int)image.Height, sourceWidth, sourceHeight, bgra, pages, duration), ct).ConfigureAwait(false);
+        await PreviewFile.WriteAsync(pending.Path, new PreviewImage((int)image.Width, (int)image.Height, sourceWidth, sourceHeight, bgra, pages, duration, frameRate), ct).ConfigureAwait(false);
     }
 }

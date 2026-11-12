@@ -630,6 +630,44 @@ public sealed class GoldenTests : IDisposable
         Assert.Equal((JobStatus.Failed, $"sample.{from} is already at that speed."), (same.Status, same.UserMessage));
     }
 
+    public static TheoryData<string, string> FramesRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "frames"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // ED-8 on the 1 s fixtures: the timeline preview carries the frame rate; frames at 0 and 0.5 s are full-size (320×240) PNGs named by
+    // their time, in the order given; a time past the end is dropped.
+    [Theory]
+    [MemberData(nameof(FramesRows))]
+    public async Task Frames_row_saves_full_size_pngs(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
+        Assert.SkipUnless(_ffmpeg.IsAvailable, "ffmpeg not fetched: run ./build/fetch-binaries.ps1");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+
+        var stripPath = Assert.Single((await RunAsync(PreviewFile.ToolId, engine, [input], ct, new() { ["strip"] = 8.0 })).Outputs);
+        var strip = await PreviewFile.ReadAsync(stripPath, ct);
+        File.Delete(stripPath);
+        Assert.InRange(strip.FrameRate, 5, 61);
+
+        var outputs = (await RunAsync("frames", engine, [input], ct, Frames.ToParameters([0.5, 0, 9]))).Outputs;
+        Assert.Equal(["sample-frame-0.5s.png", "sample-frame-0s.png"], outputs.Select(Path.GetFileName));
+        foreach (var output in outputs)
+        {
+            using var image = new MagickImage(output);
+            Assert.Equal((320u, 240u, MagickFormat.Png), (image.Width, image.Height, image.Format));
+        }
+    }
+
     // A cut covering the whole file has nothing to do.
     [Fact]
     public async Task Trim_of_the_whole_file_is_skipped()

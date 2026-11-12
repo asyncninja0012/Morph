@@ -71,6 +71,9 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             case "speed":
                 await SpeedAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
+            case "frames":
+                await FramesAsync(job, namer, progress, ct).ConfigureAwait(false);
+                return;
             case PreviewFile.PlaybackToolId:
                 await PlaybackAsync(job, namer, progress, ct).ConfigureAwait(false);
                 return;
@@ -428,7 +431,7 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             await ffmpeg.EncodeAsync([.. args, "-frames:v", "1", "-c:v", "png", "-f", "image2", picture.Path], null, new SyncProgress<JobProgress>(_ => { }), ct).ConfigureAwait(false);
             using var image = new MagickImage(picture.Path, new MagickReadSettings { Format = MagickFormat.Png });
             var (width, height) = info.VideoCodec is null ? ((int)image.Width, (int)image.Height) : info.ShownSize;
-            await Preview.WriteAsync(image, width, height, job, namer, ct, duration: seconds).ConfigureAwait(false);
+            await Preview.WriteAsync(image, width, height, job, namer, ct, duration: seconds, frameRate: FrameRate(info) ?? 0).ConfigureAwait(false);
         }
         finally
         {
@@ -574,6 +577,64 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
             await ffmpeg.EncodeAsync(["-protocol_whitelist", "file", "-f", demuxer, "-i", input, "-map_metadata", "0", .. output, pending.Path],
                 info.Duration / speed, fileProgress, ct).ConfigureAwait(false);
         }
+    }
+
+    // Save frames (ED-8): one full-size PNG per time, upright (ffmpeg's autorotate). Each time is a frame's start; the seek goes a quarter
+    // frame earlier so rounding never lands on the next frame (an input seek decodes up to the first frame at or after it). Times past the
+    // end are dropped (Same for all on a shorter video).
+    private async Task FramesAsync(JobRequest job, OutputNamer namer, IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var times = Frames.Parse(job.Parameters);
+        string? skipped = null;
+        var made = 0;
+        for (var i = 0; i < job.Inputs.Count; i++)
+        {
+            var input = job.Inputs[i];
+            var name = Path.GetFileName(input);
+            var format = await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false);
+            var demuxer = Demuxer(input, format);
+            var info = await ffmpeg.ProbeAsync(input, demuxer, ct).ConfigureAwait(false);
+            if (info.VideoCodec is null)
+            {
+                skipped = $"{name} has no picture.";
+                continue;
+            }
+
+            var kept = times.Where(t => info.Duration is not { } d || t < d).ToList();
+            if (kept.Count == 0)
+            {
+                skipped = $"{name} is shorter than the frames you picked.";
+                continue;
+            }
+
+            var quarter = 0.25 / (FrameRate(info) ?? 30);
+            for (var k = 0; k < kept.Count; k++)
+            {
+                progress.Report(new JobProgress((i + (double)k / kept.Count) / job.Inputs.Count, null));
+                var pending = namer.Reserve(input, ".png", Frames.Suffix(kept[k]));
+                await ffmpeg.EncodeAsync(
+                    ["-ss", Seconds(Math.Max(0, kept[k] - quarter)), "-protocol_whitelist", "file", "-f", demuxer, "-i", input,
+                        "-map", "0:V:0", "-frames:v", "1", "-c:v", "png", "-f", "image2", "-update", "1", pending.Path],
+                    null, new SyncProgress<JobProgress>(_ => { }), ct).ConfigureAwait(false);
+            }
+
+            made++;
+        }
+
+        if (made == 0)
+        {
+            throw new EngineException(skipped!);
+        }
+    }
+
+    // ffprobe's average frame rate ("30000/1001", "25/1") as a number; null when unknown.
+    private static double? FrameRate(MediaInfo info)
+    {
+        var parts = info.Fps?.Split('/');
+        return parts is [var n, var d] && double.TryParse(n, CultureInfo.InvariantCulture, out var num) && double.TryParse(d, CultureInfo.InvariantCulture, out var den)
+            && den > 0 && num / den is > 0 and < 1000 and var fps
+            ? fps
+            : null;
     }
 
     private static string Seconds(double s) => s.ToString("0.###", CultureInfo.InvariantCulture);

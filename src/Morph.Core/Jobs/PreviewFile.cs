@@ -7,12 +7,14 @@ namespace Morph.Core.Jobs;
 /// <param name="SourceWidth">The file's own width in the unit editors return: pixels for images and video, points for PDF pages.</param>
 /// <param name="Pages">How many pages the file has (PDF); 1 for everything else.</param>
 /// <param name="Duration">Seconds (video and audio); 0 for everything else.</param>
-public sealed record PreviewImage(int Width, int Height, double SourceWidth, double SourceHeight, byte[] Bgra, int Pages = 1, double Duration = 0);
+/// <param name="FrameRate">Frames per second (video); 0 when unknown or not a video.</param>
+public sealed record PreviewImage(int Width, int Height, double SourceWidth, double SourceHeight, byte[] Bgra, int Pages = 1, double Duration = 0,
+    double FrameRate = 0);
 
 /// <summary>
-/// The Worker → App preview format: raw pixels behind a 32-byte header, so the App shows a dropped file without decoding it
-/// (untrusted input is parsed only in the Worker). Header: "MPV3", width, height (int32 LE), source width, height (double LE), pages (int32 LE),
-/// duration (double LE).
+/// The Worker → App preview format: raw pixels behind a 48-byte header, so the App shows a dropped file without decoding it
+/// (untrusted input is parsed only in the Worker). Header: "MPV4", width, height (int32 LE), source width, height (double LE), pages (int32 LE),
+/// duration, frame rate (double LE).
 /// </summary>
 public static class PreviewFile
 {
@@ -27,8 +29,8 @@ public static class PreviewFile
     /// </summary>
     public const string PlaybackToolId = "playback";
 
-    private const int HeaderSize = 40;
-    private static ReadOnlySpan<byte> Magic => "MPV3"u8;
+    private const int HeaderSize = 48;
+    private static ReadOnlySpan<byte> Magic => "MPV4"u8;
 
     public static async Task WriteAsync(string path, PreviewImage preview, CancellationToken ct)
     {
@@ -40,6 +42,7 @@ public static class PreviewFile
         BinaryPrimitives.WriteDoubleLittleEndian(header.AsSpan(20), preview.SourceHeight);
         BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(28), preview.Pages);
         BinaryPrimitives.WriteDoubleLittleEndian(header.AsSpan(32), preview.Duration);
+        BinaryPrimitives.WriteDoubleLittleEndian(header.AsSpan(40), preview.FrameRate);
         await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
         await file.WriteAsync(header, ct).ConfigureAwait(false);
         await file.WriteAsync(preview.Bgra, ct).ConfigureAwait(false);
@@ -60,12 +63,14 @@ public static class PreviewFile
         var sourceHeight = BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(20));
         var pages = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(28));
         var duration = BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(32));
+        var frameRate = BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(40));
         if (width is < 1 or > MaxEdge || height is < 1 or > MaxEdge || bytes.Length != HeaderSize + (long)width * height * 4
-            || !double.IsFinite(sourceWidth) || !double.IsFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0 || pages < 1 || !double.IsFinite(duration) || duration < 0)
+            || !double.IsFinite(sourceWidth) || !double.IsFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0 || pages < 1 || !double.IsFinite(duration) || duration < 0
+            || !double.IsFinite(frameRate) || frameRate is < 0 or > 1000)
         {
-            throw new InvalidDataException($"Bad preview header: {width}x{height}, source {sourceWidth}x{sourceHeight}, {pages} pages, {duration} s, {bytes.Length} bytes.");
+            throw new InvalidDataException($"Bad preview header: {width}x{height}, source {sourceWidth}x{sourceHeight}, {pages} pages, {duration} s, {frameRate} fps, {bytes.Length} bytes.");
         }
 
-        return new PreviewImage(width, height, sourceWidth, sourceHeight, bytes[HeaderSize..], pages, duration);
+        return new PreviewImage(width, height, sourceWidth, sourceHeight, bytes[HeaderSize..], pages, duration, frameRate);
     }
 }

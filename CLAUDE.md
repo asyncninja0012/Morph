@@ -53,7 +53,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Allowed: MIT, BSD, Apache-2.0, MS-PL, MPL-2.0, LGPL (LGPL only as a separate replaceable binary, e.g. ffmpeg.exe). **No GPL or AGPL**, no "non-commercial" model weights.
 - FFmpeg: LGPL build only; H.264/HEVC via Media Foundation or hardware encoders (never libx264/libx265).
 - Every new package or binary: ask first, then add a row to the dependency table in `docs/PLAN.md` and to `package/THIRD-PARTY-NOTICES.txt`.
-- Untrusted input: parsing and encoding runs in `Morph.Worker` (child process in a Job Object with memory limit, kill-on-close), never in the App process. Editors show files through the Worker's `preview` job (`Morph.Core.Jobs.PreviewFile`, raw pixels), never by decoding them. A player (trim) plays only the Worker's `playback` copy (H.264/AAC written by Morph's own encoder), never the dropped file.
+- Untrusted input: parsing and encoding runs in `Morph.Worker` (child process in a Job Object with memory limit, kill-on-close), never in the App process. Editors show files through the Worker's `preview` job (`Morph.Core.Jobs.PreviewFile`, raw pixels), never by decoding them. A player (Trim, Speed, Save frames) plays only the Worker's `playback` copy (H.264/AAC written by Morph's own encoder), never the dropped file.
 
 ## Never
 - Modify, move or delete an original file (except the explicit Move to… action, and opt-in overwrite, which recycles the original).
