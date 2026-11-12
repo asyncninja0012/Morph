@@ -112,6 +112,33 @@ public sealed class MediaEngineTests : IDisposable
         Assert.Contains("playlist.mov", ex.UserMessage, StringComparison.Ordinal);
     }
 
+    // Settings → Quality (CV-4): the bit rate reaches the MP3 encoder; a better video quality makes a bigger file.
+    [Fact]
+    public async Task Quality_settings_change_the_output()
+    {
+        await RequireEncoderAsync();
+        var ct = TestContext.Current.CancellationToken;
+        var tone = await MakeAsync("tone.wav", seconds: 2);
+        var clip = await MakeMovAsync("clip.mov", seconds: 2);
+
+        async Task<string> ConvertAsync(string input, string target, System.Text.Json.Nodes.JsonObject parameters, string name)
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(_dir, name)).FullName;
+            var namer = new OutputNamer(folder);
+            await Engine().RunAsync(new JobRequest(Guid.NewGuid(), $"convert.{target}", "media", [input], folder, parameters), namer,
+                new SyncProgress<JobProgress>(_ => { }), ct);
+            return Assert.Single(namer.CommitAll());
+        }
+
+        var mp3 = await ConvertAsync(tone, "mp3", new() { ["bitrate"] = 320 }, "a");
+        var (_, rate, _) = await Ffmpeg.RunAsync(_ffmpeg.FfprobePath, ["-v", "error", "-show_entries", "stream=bit_rate", "-of", "csv=p=0", mp3], null, ct);
+        Assert.Equal("320000", rate.Trim());
+
+        var small = new FileInfo(await ConvertAsync(clip, "mp4", new() { ["quality"] = 32 }, "b")).Length;
+        var large = new FileInfo(await ConvertAsync(clip, "mp4", new() { ["quality"] = 16 }, "c")).Length;
+        Assert.True(large > small * 1.3, $"quality 16: {large} bytes, quality 32: {small} bytes");
+    }
+
     private MediaEngine Engine() => new(_ffmpeg, new EncoderProbe(_ffmpeg, Path.Combine(_dir, "..", "morph-test-encoder-cache")));
 
     private JobRequest Job(string input, string target = "mp4") => new(Guid.NewGuid(), $"convert.{target}", "media", [input], _dir);

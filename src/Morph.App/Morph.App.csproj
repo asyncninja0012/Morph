@@ -17,6 +17,8 @@
     <ProjectReference Include="..\Morph.Worker\Morph.Worker.csproj" ReferenceOutputAssembly="false" Private="false" />
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
     <EmbeddedResource Include="..\..\package\Assets\Square44x44Logo.png" LogicalName="tray.png" />
+    <!-- Settings → About → Third-party licences opens it; pack.ps1 also puts it in the package root. -->
+    <None Include="..\..\package\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="CopyWorker" AfterTargets="Build">

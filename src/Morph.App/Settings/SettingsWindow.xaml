@@ -1,0 +1,108 @@
+<Window x:Class="Morph.App.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Morph settings" Width="640" Height="560"
+        ThemeMode="System" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen" Background="Transparent">
+    <!-- Morph glass (MorphTheme): a warm tint over the Windows acrylic backdrop. -->
+    <Border Background="{DynamicResource MorphSurfaceBrush}" Padding="16,8,16,16">
+        <TabControl x:Name="Tabs">
+            <TabItem Header="General">
+                <StackPanel Margin="4,16,4,0">
+                    <CheckBox x:Name="StartupBox" Content="Start Morph when I sign in to Windows" />
+
+                    <TextBlock Text="Where results go" FontSize="15" FontWeight="SemiBold" Margin="0,24,0,8" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <RadioButton x:Name="NextToOriginal" GroupName="Output" Content="Next to the original file" />
+                    <RadioButton x:Name="FixedFolder" GroupName="Output" Margin="0,8,0,0" Content="Always in one folder" />
+                    <StackPanel Orientation="Horizontal" Margin="28,8,0,0">
+                        <TextBlock x:Name="FolderText" VerticalAlignment="Center" MaxWidth="380" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="ChooseFolderButton" Content="Choose…" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Files dragged from apps like Outlook have no folder of their own; they go to this folder, or Downloads." />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Keys">
+                <StackPanel Margin="4,16,4,0">
+                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               Text="While dragging files, hold a key to open a wheel. Each wheel needs its own key; picking one that's taken swaps them." />
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="200" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+                        <TextBlock x:Name="ConvertLabel" Text="Convert wheel" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <ComboBox x:Name="ConvertKey" Grid.Column="1" AutomationProperties.LabeledBy="{Binding ElementName=ConvertLabel}" />
+                        <TextBlock x:Name="ToolsLabel" Grid.Row="1" Text="Tools wheel" VerticalAlignment="Center" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <ComboBox x:Name="ToolsKey" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" AutomationProperties.LabeledBy="{Binding ElementName=ToolsLabel}" />
+                        <TextBlock x:Name="ActionsLabel" Grid.Row="2" Text="Actions wheel" VerticalAlignment="Center" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <ComboBox x:Name="ActionsKey" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" AutomationProperties.LabeledBy="{Binding ElementName=ActionsLabel}" />
+                    </Grid>
+                    <TextBlock TextWrapping="Wrap" Margin="0,24,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Keyboard wheel: select files in File Explorer or on the desktop and press Alt+Shift+Space." />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Wheel">
+                <Grid Margin="4,16,4,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="WheelGroupBox" Width="200" HorizontalAlignment="Left" AutomationProperties.Name="Wheel" />
+                    <ListBox x:Name="WedgeList" Grid.Row="1" Margin="0,12,0,0" AutomationProperties.Name="Wedges" />
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,12,0,0">
+                        <Button x:Name="PinButton" Content="Pin to front" MinWidth="128" />
+                        <Button x:Name="UpButton" Content="Move up" MinWidth="128" Margin="0,8,0,0" />
+                        <Button x:Name="DownButton" Content="Move down" MinWidth="128" Margin="0,8,0,0" />
+                        <Button x:Name="HideButton" Content="Hide" MinWidth="128" Margin="0,8,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,0,0">
+                        <CheckBox x:Name="LearnBox" Content="Put the ones I use most first (after the pinned ones)" />
+                        <Button x:Name="ForgetButton" Content="Forget what I use" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Quality">
+                <StackPanel x:Name="QualityPanel" Margin="4,16,4,0">
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Used when converting. Higher means better looking and larger files. Video already in the right format is copied as it is." />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Packs">
+                <StackPanel Margin="4,16,4,0">
+                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Optional downloads for a few tools. Morph asks before downloading one; removing it frees the space." />
+                    <StackPanel x:Name="PackList" Margin="0,12,0,0" />
+                    <TextBlock x:Name="PackStatus" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="About">
+                <StackPanel Margin="4,16,4,0">
+                    <TextBlock x:Name="VersionText" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               Text="Free and open source. Works offline: Morph uses the network only to download a pack you ask for." />
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button x:Name="LicencesButton" Content="Third-party licences" />
+                        <Button x:Name="LogsButton" Content="Open logs folder" Margin="8,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </Border>
+</Window>

@@ -8,6 +8,7 @@ using Morph.App.Actions;
 using Morph.App.Float;
 using Morph.App.Merge;
 using Morph.App.Packs;
+using Morph.App.Settings;
 using Morph.App.Toasts;
 using Morph.App.Tools;
 using Morph.App.Tray;
@@ -75,6 +76,14 @@ public sealed partial class App : Application
     private ActionRunner? _actions;
     private FloatShelf? _float;
     private GlobalHotkey? _hotkey;
+    private SettingsWindow? _settingsWindow;
+
+    // Settings (PRD 6.8), read from settings.json at startup and after every change in the settings window; the wheel only reads them.
+    private Dictionary<string, WheelGroup> _keys = SettingsWindow.KeyMap(null);
+    private WheelPrefs _wheelPrefs = WheelPrefs.Default;
+    private Dictionary<string, int> _usage = [];
+    private System.Text.Json.Nodes.JsonObject _quality = [];
+    private string? _outputFolder;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -98,6 +107,7 @@ public sealed partial class App : Application
                 _log.LogWarning(error, "settings.json couldn't be read; kept as settings.bad.json and started afresh");
             }
 
+            Dispatcher.Invoke(() => LoadPreferences(settings));
             return settings;
         });
 
@@ -146,18 +156,19 @@ public sealed partial class App : Application
         _tray.QuitClicked += Shutdown;
         _tray.HistoryClicked += ShowHistory;
         _tray.FloatClicked += () => _float!.Toggle();
+        _tray.SettingsClicked += ShowSettings;
         _toasts = new ToastHost(Jobs, Dispatcher, _log);
         _actions = new ActionRunner(_toasts, _toolSettings!, _log);
         _float = new FloatShelf(_toolSettings!, _log);
         _ = _float.LoadAsync();
 
         _dragGestures.GestureDetected += g => _log.LogDebug("Gesture {Gesture}", g);
-        _wheel = new DragWheelController(_dragGestures, (key, files) => key switch
+        _wheel = new DragWheelController(_dragGestures, (key, files) => _wheelPrefs.Apply(_keys[key.ToString()] switch
         {
-            ModifierKey.Shift => MatrixItems(files, WheelGroup.Convert),
-            ModifierKey.Ctrl => MatrixItems(files, WheelGroup.Tools),
+            WheelGroup.Convert => MatrixItems(files, WheelGroup.Convert),
+            WheelGroup.Tools => MatrixItems(files, WheelGroup.Tools),
             _ => ActionItems,
-        });
+        }, i => i.Id, _usage));
         _wheel.Diagnostic += m => _log.LogDebug("Wheel: {Message}", m);
         _wheel.ItemDropped += OnItemDropped;
         try
@@ -276,6 +287,7 @@ public sealed partial class App : Application
     private void OnItemDropped(WheelItem item, DroppedFiles files)
     {
         _log.LogInformation("Drop on {Tool}: {Files}{Virtual}", item.Id, string.Join(", ", files.Paths), files.Virtual ? " (virtual)" : "");
+        CountUse(ToolId(item));
         if (item.Id == "action.float" && files.Paths.Count > 0)
         {
             _float!.Add(files.Paths);
@@ -478,10 +490,10 @@ public sealed partial class App : Application
         var jobs = files.Paths
             .Select(p => (Path: p, Row: Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(p)), tool.Id)))
             .Where(f => f.Row is not null)
-            .GroupBy(f => (f.Row!.Engine, Folder: files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!,
+            .GroupBy(f => (f.Row!.Engine, Folder: _outputFolder ?? (files.Virtual ? UserDataPaths.GetDefault().Downloads : Path.GetDirectoryName(merge ? files.Paths[0] : f.Path)!),
                 Edited: perFile?[f.Path]))
             .Select(g => new JobRequest(Guid.NewGuid(), tool.Id, g.Key.Engine, [.. g.Select(f => f.Path)], g.Key.Folder,
-                g.Key.Edited is { } edited ? WithDefaults(tool.ParametersFor(choice), edited) : parameters?.DeepClone().AsObject() ?? tool.ParametersFor(choice)))
+                g.Key.Edited is { } edited ? WithDefaults(Defaults(tool, choice), edited) : parameters?.DeepClone().AsObject() ?? Defaults(tool, choice)))
             .Select(r => (r, Jobs.Enqueue(r)))
             .ToList();
 
@@ -578,6 +590,59 @@ public sealed partial class App : Application
     }
 
     // Editor output goes on top of the tool's defaults.
+    // The tool's defaults with Settings → Quality on top (CV-4).
+    private System.Text.Json.Nodes.JsonObject? Defaults(ToolDescriptor tool, string? choice) =>
+        _quality[tool.Id] is System.Text.Json.Nodes.JsonObject chosen ? WithDefaults(tool.ParametersFor(choice), chosen) : tool.ParametersFor(choice);
+
+    private void LoadPreferences(ToolSettings settings)
+    {
+        _keys = SettingsWindow.KeyMap(settings.Get(SettingsWindow.KeysId));
+        _wheelPrefs = WheelPrefs.From(settings.Get(WheelPrefs.SettingsId));
+        _usage = WheelPrefs.Usage(settings.Get(WheelPrefs.UsageId));
+        _quality = settings.Get(SettingsWindow.QualityId) ?? [];
+        _outputFolder = (string?)settings.Get(SettingsWindow.OutputId)?["folder"];
+    }
+
+    // IX-7: the wheel learns from use; the counts are saved with the settings.
+    private async void CountUse(string toolId)
+    {
+        _usage[toolId] = _usage.GetValueOrDefault(toolId) + 1;
+        var counts = new System.Text.Json.Nodes.JsonObject(_usage.Select(p => KeyValuePair.Create(p.Key, (System.Text.Json.Nodes.JsonNode?)p.Value)));
+        try
+        {
+            await (await _toolSettings!).SetAsync(WheelPrefs.UsageId, counts, CancellationToken.None);
+        }
+        catch (IOException ex)
+        {
+            _log.LogWarning(ex, "Couldn't save the use counts");
+        }
+    }
+
+    private async void ShowSettings()
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        var settings = await _toolSettings!;
+        var wedges = new[] { WheelGroup.Convert, WheelGroup.Tools }
+            .SelectMany(g => Matrix.OptionsFor([], g).Select(o => (g, o.Tool.Id, o.Tool.Label)))
+            .Concat(ActionItems.Select(a => (WheelGroup.Actions, a.Id, a.Label)))
+            .ToList();
+        _settingsWindow = new SettingsWindow(new SettingsHost(settings, wedges, InstalledPacks, _logs!.Directory, _log));
+        _settingsWindow.PreferencesChanged += () => LoadPreferences(settings);
+        _settingsWindow.PacksChanged += () => _ = Task.Run(() =>
+        {
+            _officePack = OfficeApps.LibreOffice(InstalledPacks.Root) is not null;
+            _bgPack = PackStore.Installed(InstalledPacks.Root, "bg-model", "model.onnx") is not null;
+        });
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+        _settingsWindow.Activate();
+    }
+
     private static System.Text.Json.Nodes.JsonObject WithDefaults(System.Text.Json.Nodes.JsonObject? defaults, System.Text.Json.Nodes.JsonObject edited)
     {
         var merged = defaults ?? [];

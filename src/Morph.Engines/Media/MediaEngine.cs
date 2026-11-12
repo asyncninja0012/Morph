@@ -88,6 +88,9 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
         // Every output shows up under its final name at once and fills in as its turn comes.
         var pending = job.Inputs.Select(i => namer.Reserve(i, "." + target)).ToList();
         VideoEncoder? h264 = null;
+        // Settings → Quality (CV-4): constant quality for video (x264 scale, default 23) and audio kbps; absent = the defaults above.
+        var quality = job.Parameters?["quality"]?.GetValue<int>();
+        var kbps = job.Parameters?["bitrate"]?.GetValue<int>();
         for (var i = 0; i < job.Inputs.Count; i++)
         {
             var input = job.Inputs[i];
@@ -131,8 +134,8 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
                 "mp4" or "webm" or "mkv" or "avi" =>
                 [
                     "-map", "0:v:0", "-map", "0:a:0?",
-                    .. copyVideo ? ["-c:v", "copy"] : VideoArgs(target, h264),
-                    .. copyAudio ? ["-c:a", "copy"] : VideoOutputs[target].Audio,
+                    .. copyVideo ? ["-c:v", "copy"] : VideoArgs(target, h264, quality),
+                    .. copyAudio ? ["-c:a", "copy"] : WithBitrate(VideoOutputs[target].Audio, kbps),
                     .. VideoOutputs[target].Muxer,
                 ],
                 // Two-pass palette in one graph: palettegen sees every frame, then paletteuse maps against it.
@@ -143,7 +146,7 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
                     "-loop", "0", "-f", "gif",
                 ],
                 // shortcut: a silent video → MP3 fails with the generic message; probe for an audio stream if users hit it.
-                _ => ["-map", "0:a:0", "-vn", .. AudioOutputs[target].Audio, "-f", AudioOutputs[target].Muxer],
+                _ => ["-map", "0:a:0", "-vn", .. WithBitrate(AudioOutputs[target].Audio, kbps), "-f", AudioOutputs[target].Muxer],
             };
 
             // The demuxer is forced and only the file protocol allowed, so a hostile file can't reach
@@ -877,15 +880,29 @@ public sealed class MediaEngine(Ffmpeg ffmpeg, EncoderProbe probe) : IEngine
     }
 
     // Even dimensions: every encoder here wants 4:2:0, which needs them.
-    private static string[] VideoArgs(string target, VideoEncoder? h264) => target switch
+    // Lossy audio at the chosen bit rate; lossless (WAV, FLAC) and quality-scaled (OGG Vorbis) settings stay.
+    private static string[] WithBitrate(string[] audio, int? kbps)
     {
-        "mp4" or "mkv" => ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12", .. h264!.Args],
+        var at = Array.IndexOf(audio, "-b:a");
+        if (kbps is not { } k || at < 0)
+        {
+            return audio;
+        }
+
+        var copy = (string[])audio.Clone();
+        copy[at + 1] = $"{Math.Clamp(k, 32, 320)}k";
+        return copy;
+    }
+
+    private static string[] VideoArgs(string target, VideoEncoder? h264, int? quality) => target switch
+    {
+        "mp4" or "mkv" => ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12", .. quality is { } cq ? h264!.Quality(cq) : h264!.Args],
         // realtime + cpu-used 6: about 5x faster than "good"/4 at nearly the same quality (SSIM 0.979 vs 0.979,
         // ~15% larger) on a 30 s 1080p clip; tiles and threads let libvpx use every core.
         "webm" =>
         [
             "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
-            "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-deadline", "realtime", "-cpu-used", "6", "-row-mt", "1",
+            "-c:v", "libvpx-vp9", "-crf", $"{(quality ?? 23) + 9}", "-b:v", "0", "-deadline", "realtime", "-cpu-used", "6", "-row-mt", "1",
             "-tile-columns", "2", "-threads", $"{Environment.ProcessorCount}",
         ],
         // MPEG-4 Part 2 (Xvid-style): what old players and TVs expect in an AVI. Larger than H.264 at this quality.

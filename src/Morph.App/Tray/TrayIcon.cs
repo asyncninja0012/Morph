@@ -20,6 +20,7 @@ internal sealed class TrayIcon : IDisposable
     private const uint QuitCommand = 2;
     private const uint HistoryCommand = 3;
     private const uint FloatCommand = 4;
+    private const uint SettingsCommand = 5;
     private const uint NinKeySelect = PInvoke.NIN_SELECT | 0x1; // NIN_SELECT | NINF_KEY; not in the CsWin32 metadata
 
     private readonly HwndSource _window;
@@ -50,6 +51,8 @@ internal sealed class TrayIcon : IDisposable
     public event Action? HistoryClicked;
 
     public event Action? FloatClicked;
+
+    public event Action? SettingsClicked;
 
     public event Action? OpenLogsClicked;
 
@@ -124,6 +127,7 @@ internal sealed class TrayIcon : IDisposable
         {
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, HistoryCommand, "Job history");
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, FloatCommand, "Float shelf");
+            Append(menu, MENU_ITEM_FLAGS.MF_STRING, SettingsCommand, "Settings");
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, OpenLogsCommand, "Open logs folder");
             Append(menu, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, null);
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, QuitCommand, "Quit Morph");
@@ -143,6 +147,9 @@ internal sealed class TrayIcon : IDisposable
                     break;
                 case FloatCommand:
                     FloatClicked?.Invoke();
+                    break;
+                case SettingsCommand:
+                    SettingsClicked?.Invoke();
                     break;
                 case OpenLogsCommand:
                     OpenLogsClicked?.Invoke();
