@@ -1,6 +1,6 @@
 # Morph
 
-Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the cursor; drop on a wedge to convert, run a tool, or open a small single-purpose editor. Output lands next to the original. No accounts, no telemetry, network only for optional pack downloads. Shipped as MSIX on the Microsoft Store. Solo developer reviews; Claude writes most code.
+Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the cursor; drop on a wedge to convert, run a tool, or open a small single-purpose editor. Output lands next to the original. No accounts, no telemetry, network only for optional pack downloads. Free and open source (public GitHub repo): build from source, or the signed MSIX from GitHub Releases; no Microsoft Store, no trial or paid tier (PLAN D12). Solo developer reviews; Claude writes most code.
 **Name:** the product is **Morph**. `docs/PRD.md` and `docs/PROJECT_MAP.md` still say "Pith"; it is the same product.
 
 ## Docs (read the one you need, don't copy into here)
