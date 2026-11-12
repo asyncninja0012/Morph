@@ -9,6 +9,7 @@
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="Magick.NET-Q8-x64" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" /> <!-- remove background; the native runtime is in the bg-model pack -->
     <PackageReference Include="Microsoft.Web.WebView2" />
     <!-- A Dispatcher and a hidden HwndSource host WebView2 for HTML -> PDF; WPF ships with the App anyway. Not UseWPF: it drops the System.IO using. -->
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />

@@ -26,12 +26,5 @@ public static class OfficeApps
         format != FileFormat.Pages && ProgId(format.Kind) is { } id && Type.GetTypeFromProgID(id) is not null;
 
     /// <summary>soffice.exe of the installed office pack (newest version folder), or null.</summary>
-    public static string? LibreOffice(string packsRoot)
-    {
-        var pack = Path.Combine(packsRoot, PackId);
-        return Directory.Exists(pack)
-            ? Directory.EnumerateDirectories(pack).Where(d => !d.EndsWith(".tmp", StringComparison.Ordinal)).Order(StringComparer.Ordinal)
-                .Select(d => Path.Combine(d, "program", "soffice.exe")).LastOrDefault(File.Exists)
-            : null;
-    }
+    public static string? LibreOffice(string packsRoot) => PackStore.Installed(packsRoot, PackId, Path.Combine("program", "soffice.exe"));
 }

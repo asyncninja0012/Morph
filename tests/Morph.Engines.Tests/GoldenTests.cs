@@ -355,6 +355,34 @@ public sealed class GoldenTests : IDisposable
         return stdout.Contains("Secret", StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, string> RemoveBgRows()
+    {
+        var rows = new TheoryData<string, string>();
+        foreach (var r in Matrix.Rows.Where(r => r.Tool == "remove-bg"))
+        {
+            rows.Add(r.In, r.Engine);
+        }
+
+        return rows;
+    }
+
+    // IT-4 through the real Worker and the installed bg-model pack (onnxruntime.dll and model from the pack, not the test folder).
+    [Theory]
+    [MemberData(nameof(RemoveBgRows))]
+    public async Task Remove_bg_row_cuts_out(string from, string engine)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipWhen(PackStore.Installed(PackStore.DefaultRoot, Ai.BackgroundEngine.PackId, "model.onnx") is null, "needs the bg-model pack installed");
+        var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.SkipWhen(from == "heic" && !File.Exists(fixture), "no HEIC fixture: gen-fixtures needs HEVC Video Extensions");
+        var input = Path.Combine(_dir, Path.GetFileName(fixture));
+        File.Copy(fixture, input);
+
+        var result = await RunAsync("remove-bg", engine, [input], ct);
+
+        BackgroundEngineTests.AssertCutOut(Assert.Single(result.Outputs));
+    }
+
     public static TheoryData<string, string> CropRows()
     {
         var rows = new TheoryData<string, string>();

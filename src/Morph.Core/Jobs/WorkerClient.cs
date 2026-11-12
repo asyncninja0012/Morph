@@ -16,7 +16,7 @@ public static class WorkerClient
         var started = Stopwatch.GetTimestamp();
         var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         // Documents print to PDF through WebView2, which runs its own browser, GPU, renderer and utility processes.
-        using var job = new WorkerJobObject(request.Engine == "media" ? 4UL << 30 : 2UL << 30, request.Engine == "document" ? 16u : 4u);
+        using var job = new WorkerJobObject(request.Engine is "media" or "ai" ? 4UL << 30 : 2UL << 30, request.Engine == "document" ? 16u : 4u);
         using var process = Process.Start(new ProcessStartInfo(workerPath)
         {
             UseShellExecute = false,

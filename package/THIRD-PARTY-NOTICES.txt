@@ -65,3 +65,18 @@ System.Security.Cryptography.Pkcs 10.0.13 (used by PDFsharp)
 https://github.com/dotnet/dotnet
 Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.txt)
 --------------------------------------------------------------------------------
+Microsoft.ML.OnnxRuntime.Managed 1.31.0 (in Morph); Microsoft.ML.OnnxRuntime 1.31.0 (onnxruntime.dll, in the background pack)
+https://github.com/microsoft/onnxruntime
+Licence: MIT (https://github.com/microsoft/onnxruntime/blob/main/LICENSE); third-party notices:
+https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt
+--------------------------------------------------------------------------------
+Background pack (downloaded on request, not part of the install):
+BiRefNet_lite (model weights) by Peng Zheng et al., https://github.com/ZhengPeng7/BiRefNet
+Licence: MIT (https://github.com/ZhengPeng7/BiRefNet/blob/main/LICENSE). 512x512 ONNX export:
+https://huggingface.co/studioludens/birefnet-lite-512 (MIT)
+--------------------------------------------------------------------------------
+Office pack (downloaded on request, not part of the install):
+LibreOffice, https://www.libreoffice.org/
+Licence: Mozilla Public License 2.0 and others (https://www.libreoffice.org/about-us/licenses/)
+Source: https://download.documentfoundation.org/libreoffice/src/ (the version in the pack)
+--------------------------------------------------------------------------------

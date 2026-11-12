@@ -37,11 +37,12 @@ public sealed partial class App : Application
     // Requirements count as missing until probed. shortcut: probed once at startup, so a Store extension installed
     // while Morph runs shows up after a restart; re-probe on wheel open if that bites.
     private static volatile bool _canEncodeHeic;
-    private static volatile bool _word, _excel, _powerPoint, _officePack;
+    private static volatile bool _word, _excel, _powerPoint, _officePack, _bgPack;
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(IsAvailable);
 
     // The office pack (PK-1) from the manifest; null until its ZIP is published.
     private static readonly PackInfo? OfficePack = PackStore.Known.FirstOrDefault(p => p.Id == OfficeApps.PackId);
+    private static readonly PackInfo? BgPack = PackStore.Known.FirstOrDefault(p => p.Id == "bg-model");
     private static readonly PackStore InstalledPacks = new(PackStore.DefaultRoot);
 
     // The Actions wheel (FA-2): run by the App (ActionRunner, FloatShelf), not capability rows, so they take folders too (FA-3).
@@ -112,8 +113,10 @@ public sealed partial class App : Application
             _excel = OfficeApps.HasOfficeFor(FileFormat.Xlsx);
             _powerPoint = OfficeApps.HasOfficeFor(FileFormat.Pptx);
             _officePack = OfficeApps.LibreOffice(InstalledPacks.Root) is not null;
-            _log.LogInformation("Office: Word {Word}, Excel {Excel}, PowerPoint {PowerPoint}, office pack {Pack}", _word, _excel, _powerPoint,
-                _officePack ? "installed" : OfficePack is null ? "not published" : "not installed");
+            _bgPack = PackStore.Installed(InstalledPacks.Root, "bg-model", "model.onnx") is not null;
+            _log.LogInformation("Office: Word {Word}, Excel {Excel}, PowerPoint {PowerPoint}, office pack {Pack}; background pack {BgPack}", _word, _excel, _powerPoint,
+                _officePack ? "installed" : OfficePack is null ? "not published" : "not installed",
+                _bgPack ? "installed" : BgPack is null ? "not published" : "not installed");
         });
 
         using (var png = typeof(App).Assembly.GetManifestResourceStream("tray.png")!)
@@ -199,6 +202,7 @@ public sealed partial class App : Application
             "office-sheets" => _excel || pack,
             "office-slides" => _powerPoint || pack,
             "office-pack" => pack,
+            "bg-pack" => _bgPack || BgPack is not null,
             _ => false,
         };
     }
@@ -342,6 +346,12 @@ public sealed partial class App : Application
             return;
         }
 
+        if (item.Id == "remove-bg")
+        {
+            RemoveBackgroundAsync(item, files);
+            return;
+        }
+
         if (NeedsOfficePack(item, files.Paths))
         {
             EnqueueAfterOfficePackAsync(item, files);
@@ -361,6 +371,44 @@ public sealed partial class App : Application
             FileKind.Slides => _powerPoint,
             _ => false,
         })));
+
+    // IT-4: the background pack first if it's missing, then the job; the cut-outs open in the Keep / Discard window.
+    private async void RemoveBackgroundAsync(WheelItem item, DroppedFiles files)
+    {
+        if (!_bgPack)
+        {
+            if (BgPack is null || await PackWindow.EnsureAsync(BgPack, InstalledPacks, _log) is null)
+            {
+                _log.LogInformation("{Tool}: background pack not installed; nothing done", item.Id);
+                return;
+            }
+
+            _bgPack = true;
+        }
+
+        var results = await Task.WhenAll(Enqueue(item, files).Select(h => h.Completion));
+        var outputs = results.Where(r => r.Status == JobStatus.Succeeded).SelectMany(r => r.Outputs).ToList();
+        if (outputs.Count == 0)
+        {
+            return; // a failure has its toast
+        }
+
+        var window = new BackgroundWindow(outputs, (path, ct) => PreviewAsync("remove-bg", path, 1, ct, engine: "imaging"));
+        window.DiscardClicked += () => _ = Task.Run(() =>
+        {
+            try
+            {
+                RecycleBin.Send(outputs);
+                _log.LogInformation("Remove BG: discarded {Outputs}", string.Join(", ", outputs));
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                _log.LogWarning(ex, "Remove BG: couldn't recycle {Outputs}", string.Join(", ", outputs));
+            }
+        });
+        window.Show();
+        window.Activate();
+    }
 
     // Asks for the pack (size, licence) and downloads it; the drop runs once it's in, and not at all if that's cancelled.
     private async void EnqueueAfterOfficePackAsync(WheelItem item, DroppedFiles files)
@@ -415,7 +463,7 @@ public sealed partial class App : Application
 
     /// <param name="parameters">From a settings window; null = the tool's (or ring preset's) defaults.</param>
     /// <param name="perFile">From an editor: each file's own parameters, in place of <paramref name="parameters"/>.</param>
-    private void Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null,
+    private IReadOnlyList<JobHandle> Enqueue(WheelItem item, DroppedFiles files, System.Text.Json.Nodes.JsonObject? parameters = null,
         IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonObject>? perFile = null)
     {
         _log.LogInformation("{Tool} parameters: {Parameters}", item.Id, perFile is not null ? string.Join("; ", perFile.Values.Distinct().Select(p => p.ToJsonString()))
@@ -444,20 +492,23 @@ public sealed partial class App : Application
             _history.Add(tool.Label, files.Paths, jobs);
             _historyWindow?.Refresh();
         }
+
+        return [.. jobs.Select(j => j.Item2)];
     }
 
     // An editor's picture of a file: the Worker of the tool's engine renders it into a temp folder as raw pixels
     // (PreviewFile), so the App never decodes a dropped file itself.
-    private async Task<PreviewImage> PreviewAsync(string tool, string path, int page, CancellationToken ct, double? strip = null, int? sheet = null)
+    // engine: whose preview to use instead of the tool's row (Remove BG's PNGs are pictures for the imaging engine).
+    private async Task<PreviewImage> PreviewAsync(string tool, string path, int page, CancellationToken ct, double? strip = null, int? sheet = null, string? engine = null)
     {
         var name = Path.GetFileName(path);
-        var row = Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)
+        engine ??= Matrix.RowFor(FileFormat.FromExtension(Path.GetExtension(path)), tool)?.Engine
             ?? throw new EngineException($"{name} can't be opened here.", $"no {tool} row for {path}");
         var folder = await Task.Run(() => Directory.CreateTempSubdirectory("morph-preview-").FullName, ct);
         try
         {
             var result = await WorkerClient.RunAsync(WorkerPath,
-                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, row.Engine, [path], folder, new() { ["maxEdge"] = 2048, ["page"] = page, ["strip"] = strip, ["sheet"] = sheet }), null, ct);
+                new JobRequest(Guid.NewGuid(), PreviewFile.ToolId, engine, [path], folder, new() { ["maxEdge"] = 2048, ["page"] = page, ["strip"] = strip, ["sheet"] = sheet }), null, ct);
             ct.ThrowIfCancellationRequested();
             if (result.Status != JobStatus.Succeeded || result.Outputs is not [var preview])
             {

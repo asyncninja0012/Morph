@@ -29,6 +29,16 @@ public sealed class PackStore(string root, HttpMessageHandler? handler = null)
 
     public string Root => root;
 
+    /// <summary>A file of the newest installed version of a pack (e.g. office → program\soffice.exe), or null.</summary>
+    public static string? Installed(string packsRoot, string id, string file)
+    {
+        var pack = Path.Combine(packsRoot, id);
+        return Directory.Exists(pack)
+            ? Directory.EnumerateDirectories(pack).Where(d => !d.EndsWith(".tmp", StringComparison.Ordinal)).Order(StringComparer.Ordinal)
+                .Select(d => Path.Combine(d, file)).LastOrDefault(File.Exists)
+            : null;
+    }
+
     /// <summary>The installed folder for this version of the pack, or null if it isn't installed.</summary>
     public string? Folder(PackInfo pack)
     {

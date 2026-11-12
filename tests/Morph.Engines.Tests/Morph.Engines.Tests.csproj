@@ -4,6 +4,8 @@
     <ProjectReference Include="..\..\src\Morph.Engines\Morph.Engines.csproj" />
     <!-- WorkerProtocolTests run the real Morph.Worker.exe, copied next to the tests. -->
     <ProjectReference Include="..\..\src\Morph.Worker\Morph.Worker.csproj" />
+    <!-- onnxruntime.dll for BackgroundEngineTests (users get it from the bg-model pack). -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 
 </Project>

@@ -48,6 +48,7 @@
         {"id": "flip", "label": "Upside down", "defaults": {"turn": 0, "flip": "vertical"}}
       ]},
     {"id": "crop", "label": "Crop", "glyph": "", "hint": "Cut away the edges", "wheel": "Tools"},
+    {"id": "remove-bg", "label": "Remove BG", "glyph": "", "hint": "Cut out the subject: a PNG with a see-through background", "wheel": "Tools"},
     {"id": "annotate", "label": "Annotate", "glyph": "", "hint": "Draw arrows, boxes, notes and highlights", "wheel": "Tools"},
     {"id": "redact", "label": "Redact", "glyph": "", "hint": "Black out parts so they can't be read or recovered", "wheel": "Tools"},
     {"id": "trim", "label": "Trim", "glyph": "", "hint": "Keep a part, or split it into pieces", "wheel": "Tools"},
@@ -68,7 +69,8 @@
     "office-docs": {"reason": "Needs Microsoft Word or Morph's Office pack."},
     "office-sheets": {"reason": "Needs Microsoft Excel or Morph's Office pack."},
     "office-slides": {"reason": "Needs Microsoft PowerPoint or Morph's Office pack."},
-    "office-pack": {"reason": "Needs Morph's Office pack."}
+    "office-pack": {"reason": "Needs Morph's Office pack."},
+    "bg-pack": {"reason": "Needs Morph's background pack."}
   },
   "rows": [
     {"in": "jpg", "out": "png", "tool": "convert", "engine": "imaging"},
@@ -399,6 +401,13 @@
     {"in": "doc", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-docs"]},
     {"in": "odt", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-docs"]},
     {"in": "pages", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-pack"]},
-    {"in": "pages", "out": "docx", "tool": "convert", "engine": "office", "requires": ["office-pack"]}
+    {"in": "pages", "out": "docx", "tool": "convert", "engine": "office", "requires": ["office-pack"]},
+    {"in": "jpg", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "png", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "webp", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "avif", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "tiff", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "bmp", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]},
+    {"in": "heic", "tool": "remove-bg", "engine": "ai", "requires": ["bg-pack"]}
   ]
 }

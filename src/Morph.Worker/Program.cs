@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 
 using Morph.Core.Jobs;
+using Morph.Engines.Ai;
 using Morph.Engines.Archives;
 using Morph.Engines.Documents;
 using Morph.Engines.Imaging;
@@ -39,7 +40,7 @@ void Write(WorkerMessage message)
     }
 }
 
-IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine(), new OcrEngine(), new OfficeEngine()];
+IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine(), new OcrEngine(), new OfficeEngine(), new BackgroundEngine()];
 var namer = new OutputNamer(request.OutputDirectory);
 JobResult result;
 try
