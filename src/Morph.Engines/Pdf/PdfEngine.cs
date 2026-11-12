@@ -324,7 +324,8 @@ public sealed class PdfEngine : IEngine
         }
     }
 
-    private static void Convert(string input, MagickFormat target, int? quality, OutputNamer namer, Action<double> progress, CancellationToken ct)
+    /// <param name="nameAs">The file the outputs are named after (an office file rendered through a temp PDF); default <paramref name="input"/>.</param>
+    internal static void Convert(string input, MagickFormat target, int? quality, OutputNamer namer, Action<double> progress, CancellationToken ct, string? nameAs = null)
     {
         var name = Path.GetFileName(input);
         var (doc, pages) = Open(input);
@@ -351,7 +352,7 @@ public sealed class PdfEngine : IEngine
                     {
                         var suffix = pages > 1 ? "-" + (p + 1).ToString("D" + digits, CultureInfo.InvariantCulture) : "";
                         var extension = target == MagickFormat.Jpeg ? ".jpg" : ".png";
-                        Render(page, target, quality, namer.Reserve(input, extension, suffix).Path);
+                        Render(page, target, quality, namer.Reserve(nameAs ?? input, extension, suffix).Path);
                     }
                 }
                 finally
@@ -369,7 +370,7 @@ public sealed class PdfEngine : IEngine
                     throw new EngineException($"{name} has no text to extract. It may be a scanned document.");
                 }
 
-                File.WriteAllText(namer.Reserve(input, ".txt").Path, text.ToString()); // UTF-8, no BOM
+                File.WriteAllText(namer.Reserve(nameAs ?? input, ".txt").Path, text.ToString()); // UTF-8, no BOM
             }
         }
         finally

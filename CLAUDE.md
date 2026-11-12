@@ -15,7 +15,8 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Build: `dotnet build Morph.slnx -c Debug` (warnings are errors)
 - Unit + golden tests (golden needs `tests/fixtures/`, see next line): `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
 - UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)
-- Generate fixtures (once after clone, after fetch-binaries, and when the generator changes): `dotnet run build/gen-fixtures.cs` → `tests/fixtures/` (git-ignored)
+- Generate fixtures (once after clone, after fetch-binaries, and when the generator changes): `dotnet run build/gen-fixtures.cs` → `tests/fixtures/` (git-ignored; office samples only where Microsoft Office is installed)
+- LibreOffice tests (`OfficeEngineTests`) need the office pack or `$env:MORPH_SOFFICE` = a `soffice.exe` (unpack the MSI: `msiexec /a LibreOffice.msi /qn TARGETDIR=<dir>`); they skip otherwise
 - Run: `dotnet run --project src/Morph.App`
 - Dev signing cert (once): `./build/dev-cert.ps1`, then run the printed `Import-Certificate` line in an elevated PowerShell
 - Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`
@@ -30,8 +31,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 | `src/Morph.Overlay` | Raw-input drag detection, keyboard hook, drop-catcher + wheel windows, hotkey, Explorer selection |
 | `src/Morph.Core` | FileKind sniffing, capability matrix (`capabilities.json`), ToolDescriptor, jobs/queue, output naming, undo, settings. No WPF references |
 | `src/Morph.Worker` | Console exe that runs one job per process; hosts engines; JSON lines over stdio |
-| `src/Morph.Engines` | Media (ffmpeg.exe), Imaging (Magick.NET, WIC), Pdf (PDFium, PdfPig, PDFsharp), Documents, Archives, Ocr |
-| `src/Morph.Engines.Office` | Office COM / LibreOffice pack |
+| `src/Morph.Engines` | Media (ffmpeg.exe), Imaging (Magick.NET, WIC), Pdf (PDFium, PdfPig, PDFsharp), Documents, Archives, Ocr, Office (Office COM, else the LibreOffice pack) |
 | `src/Morph.Engines.Ai` | Background removal (Windows AI / ONNX pack) |
 | `src/Morph.Editors` | Crop, annotate, redact, trim/split, page organizer. Return parameters only |
 | `src/Morph.Shell` | C++/WinRT IExplorerCommand DLL (Windows 11 right-click menu). Has its own CLAUDE.md |

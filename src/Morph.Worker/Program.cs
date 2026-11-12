@@ -8,6 +8,7 @@ using Morph.Engines.Documents;
 using Morph.Engines.Imaging;
 using Morph.Engines.Media;
 using Morph.Engines.Ocr;
+using Morph.Engines.Office;
 using Morph.Engines.Pdf;
 using Morph.Engines.Sheets;
 using Morph.Engines.Subtitles;
@@ -38,7 +39,7 @@ void Write(WorkerMessage message)
     }
 }
 
-IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine(), new OcrEngine()];
+IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine(), new OcrEngine(), new OfficeEngine()];
 var namer = new OutputNamer(request.OutputDirectory);
 JobResult result;
 try

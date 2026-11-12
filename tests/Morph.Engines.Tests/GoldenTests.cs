@@ -9,6 +9,7 @@ using ImageMagick;
 using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
+using Morph.Core.Packs;
 using Morph.Engines;
 using Morph.Engines.Documents;
 using Morph.Engines.Media;
@@ -33,7 +34,7 @@ public sealed class GoldenTests : IDisposable
 {
     private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(_ => true);
     private static readonly string WorkerPath = Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe");
-    private static readonly string Fixtures = Path.Combine(RepoRoot(), "tests", "fixtures");
+    internal static readonly string Fixtures = Path.Combine(RepoRoot(), "tests", "fixtures");
 
     private static readonly Dictionary<string, string[]> Codecs = new()
     {
@@ -82,6 +83,14 @@ public sealed class GoldenTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var fixture = Path.Combine(Fixtures, $"sample.{from}");
         Assert.SkipWhen(from == "heic" && !File.Exists(fixture), "no HEIC fixture: gen-fixtures needs HEVC Video Extensions");
+        if (engine == "office")
+        {
+            Assert.SkipWhen(from == "pages", "no .pages sample: only Apple's Pages writes one");
+            Assert.SkipUnless(File.Exists(fixture), "no office fixture: gen-fixtures saves them with Microsoft Office");
+            Assert.SkipUnless(OfficeApps.HasOfficeFor(FileFormat.FromExtension(from)) || OfficeApps.LibreOffice(PackStore.DefaultRoot) is not null,
+                "needs Microsoft Office or the office pack");
+        }
+
         Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
         Assert.SkipWhen(to == "heic" && !await SystemCodecs.CanEncodeHeicAsync(), "HEIC output needs HEVC Video Extensions");
         if (engine == "media")
@@ -95,6 +104,12 @@ public sealed class GoldenTests : IDisposable
         Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(input, ct)).Id);
 
         var result = await RunAsync($"convert.{to}", engine, [input], ct);
+        if (engine == "office")
+        {
+            await AssertOfficeOutputAsync(from, to, result.Outputs, ct);
+            return;
+        }
+
         if (from == "pdf" && engine == "pdf")
         {
             await AssertPdfPagesAsync(result.Outputs, to, ct);
@@ -922,6 +937,40 @@ public sealed class GoldenTests : IDisposable
             new SyncProgress<JobProgress>(_ => { }), ct);
         Assert.True(result.Status == JobStatus.Succeeded, $"{result.UserMessage} {result.Details}");
         return result;
+    }
+
+    // PK-1 on the gen-fixtures office samples: slides give a 2-page PDF or 2 landscape pictures; the text comes through.
+    internal static async Task AssertOfficeOutputAsync(string from, string to, IReadOnlyList<string> outputs, CancellationToken ct)
+    {
+        var kind = FileFormat.FromExtension(from).Kind;
+        if (to is "png" or "jpg")
+        {
+            Assert.Equal(["sample-1." + to, "sample-2." + to], outputs.Select(Path.GetFileName));
+            foreach (var picture in outputs)
+            {
+                Assert.Equal(to, (await FileSniffer.Instance.DetectAsync(picture, ct)).Id);
+                var info = new MagickImageInfo(picture);
+                Assert.True(info.Width > info.Height, $"{info.Width}×{info.Height} isn't a landscape slide");
+            }
+
+            return;
+        }
+
+        var pdf = Assert.Single(outputs);
+        Assert.Equal("sample.pdf", Path.GetFileName(pdf));
+        Assert.Equal("pdf", (await FileSniffer.Instance.DetectAsync(pdf, ct)).Id);
+        using var document = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        var text = string.Join(" ", document.GetPages().Select(p => p.Text));
+        if (kind == FileKind.Slides)
+        {
+            Assert.Equal(2, document.NumberOfPages);
+            Assert.Contains("Morph slide one", text, StringComparison.Ordinal);
+            Assert.Contains("Morph slide two", text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains(kind == FileKind.Spreadsheet ? "Banana" : "Morph sample", text, StringComparison.Ordinal);
+        }
     }
 
     // Each page of a PDF as a PNG, through the PDFium path that golden-tests itself above.

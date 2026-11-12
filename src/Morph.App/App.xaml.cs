@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Morph.App.Actions;
 using Morph.App.Float;
 using Morph.App.Merge;
+using Morph.App.Packs;
 using Morph.App.Toasts;
 using Morph.App.Tools;
 using Morph.App.Tray;
@@ -14,6 +15,7 @@ using Morph.Core.Capabilities;
 using Morph.Core.Formats;
 using Morph.Core.Jobs;
 using Morph.Core.Logging;
+using Morph.Core.Packs;
 using Morph.Core.Settings;
 using Morph.Editors;
 using Morph.Editors.Annotate;
@@ -35,14 +37,19 @@ public sealed partial class App : Application
     // Requirements count as missing until probed. shortcut: probed once at startup, so a Store extension installed
     // while Morph runs shows up after a restart; re-probe on wheel open if that bites.
     private static volatile bool _canEncodeHeic;
-    private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(id => id == SystemCodecs.HevcExtension && _canEncodeHeic);
+    private static volatile bool _word, _excel, _powerPoint, _officePack;
+    private static readonly CapabilityMatrix Matrix = CapabilityMatrix.LoadDefault(IsAvailable);
+
+    // The office pack (PK-1) from the manifest; null until its ZIP is published.
+    private static readonly PackInfo? OfficePack = PackStore.Known.FirstOrDefault(p => p.Id == OfficeApps.PackId);
+    private static readonly PackStore InstalledPacks = new(PackStore.DefaultRoot);
 
     // The Actions wheel (FA-2): run by the App (ActionRunner, FloatShelf), not capability rows, so they take folders too (FA-3).
     private static readonly WheelItem[] ActionItems =
     [
-        new("action.copy-to", "Copy to", ""), new("action.move-to", "Move to", ""),
-        new("action.copy-path", "Copy path", "", Choices: [new("action.copy-path/unix", "Unix style", "")]),
-        new("action.terminal", "Terminal", ""), new("action.share", "Share", ""), new("action.float", "Float", ""),
+        new("action.copy-to", "Copy to", "î£ˆ"), new("action.move-to", "Move to", "î£ž"),
+        new("action.copy-path", "Copy path", "îœ›", Choices: [new("action.copy-path/unix", "Unix style", "")]),
+        new("action.terminal", "Terminal", "î–"), new("action.share", "Share", "îœ­"), new("action.float", "Float", "îœ˜"),
     ];
 
     private static readonly string WorkerPath = Path.Combine(AppContext.BaseDirectory, "Morph.Worker.exe");
@@ -97,6 +104,16 @@ public sealed partial class App : Application
         {
             _canEncodeHeic = await SystemCodecs.CanEncodeHeicAsync();
             _log.LogInformation("HEIC output {Availability}", _canEncodeHeic ? "available" : "hidden: HEVC Video Extensions missing");
+        });
+        _ = Task.Run(() =>
+        {
+            // shortcut: probed once at startup, like HEIC; Office installed while Morph runs shows up after a restart.
+            _word = OfficeApps.HasOfficeFor(FileFormat.Docx);
+            _excel = OfficeApps.HasOfficeFor(FileFormat.Xlsx);
+            _powerPoint = OfficeApps.HasOfficeFor(FileFormat.Pptx);
+            _officePack = OfficeApps.LibreOffice(InstalledPacks.Root) is not null;
+            _log.LogInformation("Office: Word {Word}, Excel {Excel}, PowerPoint {PowerPoint}, office pack {Pack}", _word, _excel, _powerPoint,
+                _officePack ? "installed" : OfficePack is null ? "not published" : "not installed");
         });
 
         using (var png = typeof(App).Assembly.GetManifestResourceStream("tray.png")!)
@@ -169,6 +186,21 @@ public sealed partial class App : Application
         {
             _log.LogError(ex, "Drag gesture detector failed to start");
         }
+    }
+
+    // Office rows show when the Office app is there, or the office pack is installed or can be downloaded.
+    private static bool IsAvailable(string id)
+    {
+        var pack = _officePack || OfficePack is not null;
+        return id switch
+        {
+            SystemCodecs.HevcExtension => _canEncodeHeic,
+            "office-docs" => _word || pack,
+            "office-sheets" => _excel || pack,
+            "office-slides" => _powerPoint || pack,
+            "office-pack" => pack,
+            _ => false,
+        };
     }
 
     // Packaged, %LOCALAPPDATA% is redirected into the package, where Explorer wouldn't find it; LocalState is the real folder.
@@ -310,6 +342,36 @@ public sealed partial class App : Application
             return;
         }
 
+        if (NeedsOfficePack(item, files.Paths))
+        {
+            EnqueueAfterOfficePackAsync(item, files);
+            return;
+        }
+
+        Enqueue(item, files);
+    }
+
+    // PK-1: an office file whose Office app is missing (always for Apple Pages) is converted by the office pack.
+    private static bool NeedsOfficePack(WheelItem item, IReadOnlyList<string> paths) => !_officePack && paths
+        .Select(p => FileFormat.FromExtension(Path.GetExtension(p)))
+        .Any(f => Matrix.RowFor(f, ToolId(item))?.Engine == "office" && (f == FileFormat.Pages || !(f.Kind switch
+        {
+            FileKind.Document => _word,
+            FileKind.Spreadsheet => _excel,
+            FileKind.Slides => _powerPoint,
+            _ => false,
+        })));
+
+    // Asks for the pack (size, licence) and downloads it; the drop runs once it's in, and not at all if that's cancelled.
+    private async void EnqueueAfterOfficePackAsync(WheelItem item, DroppedFiles files)
+    {
+        if (OfficePack is null || await PackWindow.EnsureAsync(OfficePack, InstalledPacks, _log) is null)
+        {
+            _log.LogInformation("{Tool}: office pack not installed; nothing converted", item.Id);
+            return;
+        }
+
+        _officePack = true;
         Enqueue(item, files);
     }
 

@@ -43,6 +43,10 @@ public sealed class FileSnifferTests : IDisposable
         { "pdf", [.. "junk\r\n%PDF-1.4"u8], ".pdf" },
         { "zip", [.. "PK"u8, 5, 6, .. new byte[18]], ".zip" },
         { "gz", [0x1F, 0x8B, 8, 0], ".gz" },
+        { "doc", Ole, ".doc" },
+        { "xls", Ole, ".xls" },
+        { "ppt", Ole, ".ppt" },
+        { "", Ole, ".msg" }, // Outlook's compound files aren't office documents
         { "tar", Tar(), ".tar" },
         { "vtt", [0xEF, 0xBB, 0xBF, .. "WEBVTT\n\n"u8], ".txt" },
         { "srt", [.. "1\n00:00:01,000 --> 00:00:02,000\nHi\n"u8], ".srt" },
@@ -54,6 +58,8 @@ public sealed class FileSnifferTests : IDisposable
         { "", [0, 1, 2, 3, 0, 0], ".csv" },
         { "", [.. "BMW owners\n"u8], ".bmp" },
     };
+
+    private static byte[] Ole => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0];
 
     [Theory]
     [MemberData(nameof(Headers))]
@@ -79,9 +85,11 @@ public sealed class FileSnifferTests : IDisposable
     [InlineData("xl/workbook.xml", "xlsx")]
     [InlineData("ppt/presentation.xml", "pptx")]
     [InlineData("readme.txt", "zip")]
-    public async Task Zip_entries_tell_office_files_from_archives(string entry, string expected)
+    [InlineData("Index/Document.iwa", "pages", ".pages")]
+    [InlineData("Index/Document.iwa", "zip", ".numbers")] // Numbers and Keynote look the same inside; only Pages is read
+    public async Task Zip_entries_tell_office_files_from_archives(string entry, string expected, string extension = ".zip")
     {
-        var path = Path.Combine(_dir, "file.zip"); // extension deliberately wrong for the Office cases
+        var path = Path.Combine(_dir, "file" + extension); // .zip is deliberately wrong for the Office cases
         await using (var zip = new ZipArchive(File.Create(path), ZipArchiveMode.Create))
         {
             zip.CreateEntry("[Content_Types].xml");

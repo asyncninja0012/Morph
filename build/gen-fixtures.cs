@@ -1,4 +1,5 @@
 #:package Magick.NET-Q8-x64
+#:property PublishAot=false
 
 // Writes one sample file per input format in capabilities.json to tests/fixtures/ (git-ignored), for the golden tests.
 // Run from the repo root after ./build/fetch-binaries.ps1:  dotnet run build/gen-fixtures.cs
@@ -279,5 +280,61 @@ using (var gz = new System.IO.Compression.GZipStream(File.Create(Path.Combine(di
     gz.Write(tarBytes.ToArray());
 }
 
+// Office (PK-1): saved by the user's own Office through COM, so these exist only where Office is installed; the golden tests skip
+// them elsewhere. PPTX/PPT/ODP: two title slides ("Morph slide one", "Morph slide two"); DOC/ODT from sample.docx; XLS/ODS from sample.xlsx.
+// No .pages sample: only Apple's Pages writes one.
+WithOffice("PowerPoint.Application", powerPoint =>
+{
+    var deck = powerPoint.Presentations.Add(WithWindow: 0);
+    for (var i = 1; i <= 2; i++)
+    {
+        deck.Slides.Add(i, 1).Shapes[1].TextFrame.TextRange.Text = i == 1 ? "Morph slide one" : "Morph slide two"; // 1 = ppLayoutTitle
+    }
+
+    foreach (var (ext, format) in new[] { ("pptx", 24), ("ppt", 1), ("odp", 35) })
+    {
+        deck.SaveAs(Path.Combine(dir, $"sample.{ext}"), format);
+    }
+
+    deck.Close();
+});
+WithOffice("Word.Application", word =>
+{
+    var document = word.Documents.Open(Path.Combine(dir, "sample.docx"), ReadOnly: true, AddToRecentFiles: false);
+    document.SaveAs2(Path.Combine(dir, "sample.doc"), 0); // wdFormatDocument
+    document.SaveAs2(Path.Combine(dir, "sample.odt"), 23); // wdFormatOpenDocumentText
+    document.Close(0);
+});
+WithOffice("Excel.Application", excel =>
+{
+    excel.DisplayAlerts = false;
+    var book = excel.Workbooks.Open(Path.Combine(dir, "sample.xlsx"), ReadOnly: true, AddToMru: false);
+    book.SaveAs(Path.Combine(dir, "sample.xls"), 56); // xlExcel8
+    book.SaveAs(Path.Combine(dir, "sample.ods"), 60); // xlOpenDocumentSpreadsheet
+    book.Close(false);
+});
+
 Console.WriteLine($"Fixtures in {dir}");
 return 0;
+
+// Runs the Office app, then quits it. An Office app keeps running after Quit while any COM wrapper of it is alive (also after
+// this process ends), so the wrappers are collected once save has returned and nothing refers to them.
+static void WithOffice(string progId, Action<dynamic> save)
+{
+    if (Type.GetTypeFromProgID(progId) is not { } type)
+    {
+        return;
+    }
+
+    Run(type, save);
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+
+    static void Run(Type type, Action<dynamic> save)
+    {
+        dynamic app = Activator.CreateInstance(type)!;
+        save(app);
+        app.Quit();
+        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(app);
+    }
+}

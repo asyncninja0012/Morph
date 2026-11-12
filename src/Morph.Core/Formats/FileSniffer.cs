@@ -38,7 +38,7 @@ public sealed class FileSniffer : IFileSniffer
         }
 
         file.Position = 0;
-        return await InspectZipAsync(file, ct).ConfigureAwait(false);
+        return await InspectZipAsync(file, Path.GetExtension(path), ct).ConfigureAwait(false);
     }
 
     /// <summary>Format from the file header alone. Returns <see cref="FileFormat.Zip"/> for any ZIP that isn't ODF.</summary>
@@ -72,6 +72,9 @@ public sealed class FileSniffer : IFileSniffer
             case [(byte)'P', (byte)'K', 0x03, 0x04, ..]: return OdfFromFirstEntry(h) ?? FileFormat.Zip;
             case [(byte)'P', (byte)'K', 0x05, 0x06, ..]: return FileFormat.Zip; // empty archive
             case [0x1F, 0x8B, ..]: return FileFormat.Gz;
+            // OLE compound file (old Office). shortcut: the stream names that tell DOC/XLS/PPT apart can sit anywhere in the file, so the
+            // extension decides; a renamed one fails in Office or LibreOffice instead. Read the directory if that matters.
+            case [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, ..]: return claimed.Id is "doc" or "xls" or "ppt" ? claimed : FileFormat.Unknown;
             case [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..]: return IsoBmff(h, claimed);
         }
 
@@ -164,7 +167,7 @@ public sealed class FileSniffer : IFileSniffer
 
     // shortcut: ZipArchive loads the whole central directory; a ZIP with millions of entries costs memory in the
     // caller's process. Cap by the EOCD entry count if sniffing ever runs on untrusted bulk input.
-    private static async Task<FileFormat> InspectZipAsync(Stream file, CancellationToken ct)
+    private static async Task<FileFormat> InspectZipAsync(Stream file, string extension, CancellationToken ct)
     {
         try
         {
@@ -177,6 +180,8 @@ public sealed class FileSniffer : IFileSniffer
                     case "word/document.xml": return FileFormat.Docx;
                     case "xl/workbook.xml": return FileFormat.Xlsx;
                     case "ppt/presentation.xml": return FileFormat.Pptx;
+                    // Pages, Numbers and Keynote share this layout; only the extension tells them apart.
+                    case "Index/Document.iwa" when FileFormat.FromExtension(extension) == FileFormat.Pages: return FileFormat.Pages;
                 }
             }
         }

@@ -38,6 +38,10 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
     public static readonly FileFormat Docx = Of("docx", FileKind.Document, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     public static readonly FileFormat Xlsx = Of("xlsx", FileKind.Spreadsheet, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     public static readonly FileFormat Pptx = Of("pptx", FileKind.Slides, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    public static readonly FileFormat Doc = Of("doc", FileKind.Document, "application/msword");
+    public static readonly FileFormat Xls = Of("xls", FileKind.Spreadsheet, "application/vnd.ms-excel");
+    public static readonly FileFormat Ppt = Of("ppt", FileKind.Slides, "application/vnd.ms-powerpoint");
+    public static readonly FileFormat Pages = Of("pages", FileKind.Document, "application/vnd.apple.pages");
     public static readonly FileFormat Odt = Of("odt", FileKind.Document, "application/vnd.oasis.opendocument.text");
     public static readonly FileFormat Ods = Of("ods", FileKind.Spreadsheet, "application/vnd.oasis.opendocument.spreadsheet");
     public static readonly FileFormat Odp = Of("odp", FileKind.Slides, "application/vnd.oasis.opendocument.presentation");
@@ -55,7 +59,7 @@ public sealed record FileFormat(string Id, FileKind Kind, string Extension, stri
     private static readonly Dictionary<string, FileFormat> ByExtension = new FileFormat[]
     {
         Jpg, Png, Gif, Bmp, Webp, Tiff, Heic, Avif, Mp4, Mov, Mkv, Webm, Avi, Wmv, Mp3, M4a, Wav, Flac, Ogg, Opus, Pdf,
-        Docx, Xlsx, Pptx, Odt, Ods, Odp, Txt, Md, Html, Csv, Srt, Vtt, Zip, Tar, Gz,
+        Docx, Xlsx, Pptx, Doc, Xls, Ppt, Pages, Odt, Ods, Odp, Txt, Md, Html, Csv, Srt, Vtt, Zip, Tar, Gz,
     }.ToDictionary(f => f.Id);
 
     /// <summary>

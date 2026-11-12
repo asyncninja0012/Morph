@@ -64,7 +64,11 @@
     {"id": "merge", "label": "Merge", "glyph": "", "hint": "Join into one file, in the order selected", "wheel": "Tools", "minFiles": 2}
   ],
   "requirements": {
-    "hevc-ext": {"reason": "Needs HEVC Video Extensions."}
+    "hevc-ext": {"reason": "Needs HEVC Video Extensions."},
+    "office-docs": {"reason": "Needs Microsoft Word or Morph's Office pack."},
+    "office-sheets": {"reason": "Needs Microsoft Excel or Morph's Office pack."},
+    "office-slides": {"reason": "Needs Microsoft PowerPoint or Morph's Office pack."},
+    "office-pack": {"reason": "Needs Morph's Office pack."}
   },
   "rows": [
     {"in": "jpg", "out": "png", "tool": "convert", "engine": "imaging"},
@@ -379,6 +383,22 @@
     {"in": "mkv", "tool": "make-gif", "engine": "media"},
     {"in": "webm", "tool": "make-gif", "engine": "media"},
     {"in": "avi", "tool": "make-gif", "engine": "media"},
-    {"in": "wmv", "tool": "make-gif", "engine": "media"}
+    {"in": "wmv", "tool": "make-gif", "engine": "media"},
+    {"in": "pptx", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "pptx", "out": "png", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "pptx", "out": "jpg", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "ppt", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "ppt", "out": "png", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "ppt", "out": "jpg", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "odp", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "odp", "out": "png", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "odp", "out": "jpg", "tool": "convert", "engine": "office", "requires": ["office-slides"]},
+    {"in": "xlsx", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-sheets"]},
+    {"in": "xls", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-sheets"]},
+    {"in": "ods", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-sheets"]},
+    {"in": "doc", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-docs"]},
+    {"in": "odt", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-docs"]},
+    {"in": "pages", "out": "pdf", "tool": "convert", "engine": "office", "requires": ["office-pack"]},
+    {"in": "pages", "out": "docx", "tool": "convert", "engine": "office", "requires": ["office-pack"]}
   ]
 }
