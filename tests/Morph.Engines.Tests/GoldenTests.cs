@@ -239,6 +239,7 @@ public sealed class GoldenTests : IDisposable
     {
         var ct = TestContext.Current.CancellationToken;
         var fixture = Path.Combine(Fixtures, $"sample.{from}");
+        Assert.SkipWhen(tool == "ocr" && from == "heic", "Magick can't write a HEIC with text to read");
         Assert.True(File.Exists(fixture), $"{fixture} is missing. Run: dotnet run build/gen-fixtures.cs");
         if (engine == "media")
         {
@@ -247,7 +248,6 @@ public sealed class GoldenTests : IDisposable
         }
 
         Assert.SkipWhen(tool == "ocr" && WinOcr.TryCreateFromUserProfileLanguages() is null, "no Windows OCR language installed");
-        Assert.SkipWhen(tool == "ocr" && from == "heic", "Magick can't write a HEIC with text to read");
 
         var input = Path.Combine(_dir, Path.GetFileName(fixture));
         if (tool == "ocr" && from != "pdf")

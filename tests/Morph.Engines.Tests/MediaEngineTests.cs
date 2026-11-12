@@ -5,6 +5,11 @@ using Morph.Engines.Media;
 
 namespace Morph.Engines.Tests;
 
+// Alone, not beside other test classes: Cancel_kills_ffmpeg_and_leaves_no_output looks for any ffmpeg.exe still running.
+[CollectionDefinition(DisableParallelization = true)]
+public sealed class MediaEngineCollection;
+
+[Collection(typeof(MediaEngineCollection))]
 public sealed class MediaEngineTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("morph-media-").FullName;

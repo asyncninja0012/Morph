@@ -60,7 +60,7 @@ string[] tone = ["-f", "lavfi", "-i", "sine=d=1"];
     ("mp4", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "aac"]),
     ("mov", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "pcm_s16le"]),
     ("mkv", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "flac"]),
-    ("webm", [.. video, .. tone, "-c:v", "libvpx", "-c:a", "libvorbis"]),
+    ("webm", [.. video, .. tone, "-c:v", "libvpx", "-b:v", "2M", "-c:a", "libvorbis"]), // 2 Mb/s so Compress has something to shrink
     ("avi", [.. video, .. tone, "-c:v", "mpeg4", "-c:a", "pcm_s16le"]),
     ("wmv", [.. video, .. tone, "-c:v", "wmv2", "-c:a", "wmav2"]),
     ("mp3", [.. tone, "-c:a", "libmp3lame"]),
