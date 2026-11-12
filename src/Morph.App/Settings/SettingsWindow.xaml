@@ -100,6 +100,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button x:Name="LicencesButton" Content="Third-party licences" />
                         <Button x:Name="LogsButton" Content="Open logs folder" Margin="8,0,0,0" />
+                        <Button x:Name="TourButton" Content="Show the tour again" Margin="8,0,0,0" />
                     </StackPanel>
                 </StackPanel>
             </TabItem>

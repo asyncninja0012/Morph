@@ -71,6 +71,9 @@ public sealed partial class SettingsWindow : Window
 
     public event Action? PacksChanged;
 
+    /// <summary>About → Show the tour again.</summary>
+    public event Action? TourClicked;
+
     /// <summary>Which wheel each held key opens: Shift → Convert, Ctrl → Tools, Alt → Actions unless remapped.</summary>
     public static Dictionary<string, WheelGroup> KeyMap(JsonObject? json)
     {
@@ -467,6 +470,7 @@ public sealed partial class SettingsWindow : Window
         var notices = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt");
         LicencesButton.Click += (_, _) => Process.Start(new ProcessStartInfo(notices) { UseShellExecute = true })?.Dispose();
         LicencesButton.IsEnabled = File.Exists(notices);
+        TourButton.Click += (_, _) => TourClicked?.Invoke();
         LogsButton.Click += (_, _) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_host.LogsFolder}\"") { UseShellExecute = false })?.Dispose();
     }
 }

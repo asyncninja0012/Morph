@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Morph.App.Actions;
 using Morph.App.Float;
 using Morph.App.Merge;
+using Morph.App.Onboarding;
 using Morph.App.Packs;
 using Morph.App.Settings;
 using Morph.App.Toasts;
@@ -77,6 +78,7 @@ public sealed partial class App : Application
     private FloatShelf? _float;
     private GlobalHotkey? _hotkey;
     private SettingsWindow? _settingsWindow;
+    private OnboardingWindow? _onboarding;
 
     // Settings (PRD 6.8), read from settings.json at startup and after every change in the settings window; the wheel only reads them.
     private Dictionary<string, WheelGroup> _keys = SettingsWindow.KeyMap(null);
@@ -108,6 +110,10 @@ public sealed partial class App : Application
             }
 
             Dispatcher.Invoke(() => LoadPreferences(settings));
+            if (settings.Get(OnboardingId)?["done"]?.GetValue<bool>() != true)
+            {
+                _ = Dispatcher.BeginInvoke(ShowOnboarding); // first launch (PRD 6.9)
+            }
             return settings;
         });
 
@@ -618,6 +624,36 @@ public sealed partial class App : Application
         }
     }
 
+    private const string OnboardingId = "settings.onboarding";
+
+    // The first-run demo; closing it in any way (done or skipped) means it isn't shown again at startup.
+    private void ShowOnboarding()
+    {
+        if (_onboarding is not null)
+        {
+            _onboarding.Activate();
+            return;
+        }
+
+        string KeyFor(WheelGroup group) => _keys.First(k => k.Value == group).Key;
+        _onboarding = new OnboardingWindow(Path.Combine(DataDirectory(), "demo"), _outputFolder,
+            (KeyFor(WheelGroup.Convert), KeyFor(WheelGroup.Tools), KeyFor(WheelGroup.Actions)), _log);
+        _onboarding.Closed += async (_, _) =>
+        {
+            _onboarding = null;
+            try
+            {
+                await (await _toolSettings!).SetAsync(OnboardingId, new() { ["done"] = true }, CancellationToken.None);
+            }
+            catch (IOException ex)
+            {
+                _log.LogWarning(ex, "Couldn't save that the tour was seen");
+            }
+        };
+        _onboarding.Show();
+        _onboarding.Activate();
+    }
+
     private async void ShowSettings()
     {
         if (_settingsWindow is not null)
@@ -638,6 +674,7 @@ public sealed partial class App : Application
             _officePack = OfficeApps.LibreOffice(InstalledPacks.Root) is not null;
             _bgPack = PackStore.Installed(InstalledPacks.Root, "bg-model", "model.onnx") is not null;
         });
+        _settingsWindow.TourClicked += ShowOnboarding;
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.Activate();
