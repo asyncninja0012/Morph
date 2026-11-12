@@ -1,6 +1,6 @@
 # Morph
 
-Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the cursor; drop on a wedge to convert, run a tool, or open a small single-purpose editor. Output lands next to the original. No accounts, no telemetry, network only for optional pack downloads. Free and open source (public GitHub repo): build from source, or the signed MSIX from GitHub Releases; no Microsoft Store, no trial or paid tier (PLAN D12). Solo developer reviews; Claude writes most code.
+Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the cursor; drop on a wedge to convert, run a tool, or open a small single-purpose editor. Output lands next to the original. No accounts, no telemetry, network only for optional pack downloads. Free and open source (MIT, public GitHub repo): build from source, or the per-user `Morph-<version>-setup.exe` (Inno Setup, unsigned for now) from GitHub Releases; no Microsoft Store, no trial or paid tier (PLAN D12). Solo developer reviews; Claude writes most code.
 **Name:** the product is **Morph**. `docs/PRD.md` and `docs/PROJECT_MAP.md` still say "Pith"; it is the same product.
 
 ## Docs (read the one you need, don't copy into here)
@@ -19,7 +19,9 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - LibreOffice tests (`OfficeEngineTests`) need the office pack or `$env:MORPH_SOFFICE` = a `soffice.exe` (unpack the MSI: `msiexec /a LibreOffice.msi /qn TARGETDIR=<dir>`); they skip otherwise
 - Run: `dotnet run --project src/Morph.App`
 - Dev signing cert (once): `./build/dev-cert.ps1`, then run the printed `Import-Certificate` line in an elevated PowerShell
-- Package: `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`
+- Installer (the release): `./build/installer.ps1 [-Version x.y.z]` → `artifacts/Morph-<version>-setup.exe` + `.sha256` (Inno Setup from the `Tools.InnoSetup` NuGet package, nothing to install). A `v*` tag runs `.github/workflows/release.yml`, which makes a draft GitHub Release with it.
+- Packs: `./build/make-office-pack.ps1 -Version <LibreOffice version>`, `./build/make-bg-pack.ps1` → `artifacts/packs/*.zip`; each prints its `PackStore.Known` line. Upload to a `pack-<id>-<version>` release (not "latest"), then add the line.
+- Package (MSIX, dev/size budget only since D12): `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`
 - From Git Bash, run any `.ps1` as `powershell.exe -NoProfile -ExecutionPolicy Bypass -File build/<name>.ps1`
 - Size budget: `./build/size-check.ps1` (fails over 120 MB download / 300 MB installed)
 - Format check: `dotnet format Morph.slnx --verify-no-changes`
@@ -59,7 +61,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Modify, move or delete an original file (except the explicit Move to… action, and opt-in overwrite, which recycles the original).
 - Write output anywhere except the name `OutputNamer.Reserve` gave you in the target folder (created empty at once, so the file shows under its real name while it fills in; a failed or cancelled job deletes it).
 - Block the UI thread or do I/O on it; never block inside a low-level hook callback.
-- Make network calls outside the pack downloader. No telemetry.
+- Make network calls outside the pack downloader and the user-clicked "Check for updates" (`Morph.Core.Packs.UpdateCheck`). No telemetry.
 - Add a dependency, change a licence-relevant build flag, or swap a library without asking.
 - Steal focus from the drag source (the overlay is `WS_EX_NOACTIVATE`).
 - Copy Tangerine's visuals, name, icons or colours.

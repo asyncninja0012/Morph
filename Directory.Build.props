@@ -9,5 +9,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <Company>Morph</Company>
     <Product>Morph</Product>
+    <!-- The release workflow passes -p:Version from the v* tag; this is the version of local builds. -->
+    <Version>0.9.0</Version>
   </PropertyGroup>
 </Project>

@@ -41,3 +41,10 @@ jobs:
         with:
           name: Morph_x64.msix
           path: artifacts/Morph_x64.msix
+      # The release installer (D12); the MSIX above stays for the size budget (R3) and a later signed build.
+      - run: ./build/installer.ps1
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Morph-setup
+          path: artifacts/Morph-*-setup.exe*

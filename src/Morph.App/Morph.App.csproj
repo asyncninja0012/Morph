@@ -6,6 +6,7 @@
     <AssemblyName>Morph</AssemblyName>
     <RootNamespace>Morph.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>morph.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

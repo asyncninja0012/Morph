@@ -96,7 +96,15 @@
                 <StackPanel Margin="4,16,4,0">
                     <TextBlock x:Name="VersionText" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                               Text="Free and open source. Works offline: Morph uses the network only to download a pack you ask for." />
+                               Text="Free and open source (MIT). Works offline: Morph uses the network only to download a pack you ask for, or to check for updates when you click the button." />
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button x:Name="UpdateButton" Content="Check for updates" />
+                        <TextBlock x:Name="UpdateText" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap" MaxWidth="380"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock x:Name="UpdateLinkText" VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed">
+                            <Hyperlink x:Name="UpdateLink">Open the download page</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button x:Name="LicencesButton" Content="Third-party licences" />
                         <Button x:Name="LogsButton" Content="Open logs folder" Margin="8,0,0,0" />

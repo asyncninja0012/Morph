@@ -464,13 +464,47 @@ public sealed partial class SettingsWindow : Window
         PacksChanged?.Invoke();
     }
 
+    // The only network call besides pack downloads, and only on this click (PLAN D12).
+    private async void CheckForUpdatesAsync()
+    {
+        UpdateButton.IsEnabled = false;
+        UpdateLinkText.Visibility = Visibility.Collapsed;
+        UpdateText.Text = "Checking…";
+        var current = typeof(SettingsWindow).Assembly.GetName().Version ?? new Version(0, 0, 0);
+        try
+        {
+            var update = await UpdateCheck.NewerAsync(new Version(current.Major, current.Minor, current.Build), CancellationToken.None);
+            if (update is null)
+            {
+                UpdateText.Text = "Morph is up to date.";
+            }
+            else
+            {
+                UpdateText.Text = $"Morph {update.Version.ToString(3)} is out.";
+                UpdateLink.NavigateUri = update.Page;
+                UpdateLinkText.Visibility = Visibility.Visible;
+            }
+
+            _host.Log.LogInformation("Update check: {Result}", update is null ? "up to date" : $"{update.Version} at {update.Page}");
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException)
+        {
+            UpdateText.Text = "Couldn't reach GitHub. Check the connection and try again.";
+            _host.Log.LogWarning(ex, "Update check failed");
+        }
+
+        UpdateButton.IsEnabled = true;
+    }
+
     private void LoadAbout()
     {
         VersionText.Text = $"Morph {typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3)}";
         var notices = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt");
         LicencesButton.Click += (_, _) => Process.Start(new ProcessStartInfo(notices) { UseShellExecute = true })?.Dispose();
         LicencesButton.IsEnabled = File.Exists(notices);
+        UpdateLink.Click += (_, _) => Process.Start(new ProcessStartInfo(UpdateLink.NavigateUri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
         TourButton.Click += (_, _) => TourClicked?.Invoke();
+        UpdateButton.Click += (_, _) => CheckForUpdatesAsync();
         LogsButton.Click += (_, _) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_host.LogsFolder}\"") { UseShellExecute = false })?.Dispose();
     }
 }
