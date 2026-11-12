@@ -33,8 +33,8 @@ Two tools need a larger download, offered the first time you use them:
 
 | Pack | For | Size |
 |---|---|---|
-| Office pack (LibreOffice) | Slides, spreadsheets, DOC, OpenDocument and Pages when Microsoft Office isn't installed (with Office, Morph uses it instead) | ~350 MB |
-| Background pack | Remove background (BiRefNet-lite model, ONNX Runtime) | ~210 MB |
+| Office pack (LibreOffice) | Slides, spreadsheets, DOC, OpenDocument and Pages when Microsoft Office isn't installed (with Office, Morph uses it instead) | ~490 MB download, 1.5 GB on disk |
+| Background pack | Remove background (BiRefNet-lite model, ONNX Runtime) | ~165 MB download, 200 MB on disk |
 
 They can be removed in Settings → Packs.
 

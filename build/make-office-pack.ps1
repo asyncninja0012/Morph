@@ -21,13 +21,17 @@ $root = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $root "artifacts/packs/office-$Version"
 $unpacked = Join-Path $work 'x'
 $zip = Join-Path $root "artifacts/packs/office-$Version.zip"
-if (Test-Path $work) { Remove-Item $work -Recurse -Force }
-New-Item -ItemType Directory $work | Out-Null
+# The downloaded MSI is kept between runs (375 MB); everything else is rebuilt.
+if (Test-Path $unpacked) { Remove-Item $unpacked -Recurse -Force }
+New-Item -ItemType Directory $work -Force | Out-Null
+$clock = [Diagnostics.Stopwatch]::StartNew()
+function Step([string] $What) { Write-Host ("{0,6:N0} s  {1}" -f $clock.Elapsed.TotalSeconds, $What) }
 
 $name = "LibreOffice_${Version}_Win_x86-64.msi"
 $msi = Join-Path $work $name
-$found = $false
+$found = Test-Path $msi
 foreach ($base in "https://download.documentfoundation.org/libreoffice/stable/$Version", "https://downloadarchive.documentfoundation.org/libreoffice/old/$Version") {
+    if ($found) { break }
     if (Get-File "$base/win/x86_64/$name" $msi) {
         $found = $true
         break
@@ -42,15 +46,26 @@ if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notm
     throw "The MSI isn't signed by The Document Foundation ($($signature.Status), $($signature.SignerCertificate.Subject))."
 }
 
+Step 'MSI downloaded and checked'
 $exit = (Start-Process msiexec.exe -ArgumentList "/a `"$msi`" /qn TARGETDIR=`"$unpacked`"" -Wait -PassThru).ExitCode
 if ($exit -ne 0) { throw "msiexec /a failed with exit code $exit." }
+Step 'unpacked'
 Get-ChildItem $unpacked -Filter *.msi | Remove-Item # the administrative install keeps a copy of the MSI
 $soffice = Join-Path $unpacked 'program/soffice.exe'
 if (-not (Test-Path $soffice)) { throw 'program\soffice.exe missing after unpacking.' }
 
+# What the MSI would put into Windows itself: the fonts go where LibreOffice loads its own fonts from (checked: a page set in
+# Caladea renders in Caladea from there, and falls back to Cambria from Fonts\), and the VC++ runtime goes next to soffice.exe
+# (app-local), so PCs without the Visual C++ 2015-2022 runtime still start it.
+$fonts = New-Item -ItemType Directory (Join-Path $unpacked 'share/fonts/truetype') -Force
+Get-ChildItem (Join-Path $unpacked 'Fonts') -File | Move-Item -Destination $fonts
+Get-ChildItem (Join-Path $unpacked 'System64') -Filter *.dll | Copy-Item -Destination (Join-Path $unpacked 'program')
+foreach ($left in 'Fonts', 'System', 'System64') { Remove-Item (Join-Path $unpacked $left) -Recurse -Force }
+
 if (Test-Path $zip) { Remove-Item $zip }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($unpacked, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+Step 'zipped'
 
 $size = (Get-Item $zip).Length
 $installed = (Get-ChildItem $unpacked -Recurse -File | Measure-Object Length -Sum).Sum
