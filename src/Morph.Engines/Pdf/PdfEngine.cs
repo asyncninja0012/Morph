@@ -38,6 +38,26 @@ public sealed class PdfEngine : IEngine
             return;
         }
 
+        if (job.ToolId == "convert.pptx")
+        {
+            for (var i = 0; i < job.Inputs.Count; i++)
+            {
+                var input = job.Inputs[i];
+                if ((await FileSniffer.Instance.DetectAsync(input, ct).ConfigureAwait(false)).Id != "pdf")
+                {
+                    throw new EngineException($"{Path.GetFileName(input)} isn't a PDF.");
+                }
+
+                var done = i;
+                lock (Pdfium.Sync)
+                {
+                    PdfSlides.Write(input, namer.Reserve(input, ".pptx").Path, f => progress.Report(new JobProgress((done + f) / job.Inputs.Count, null)), ct);
+                }
+            }
+
+            return;
+        }
+
         if (job.ToolId == "strip-metadata")
         {
             Strip(job, namer, progress, ct);

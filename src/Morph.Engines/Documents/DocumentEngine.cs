@@ -8,7 +8,7 @@ namespace Morph.Engines.Documents;
 /// <summary>
 /// DOCX, Markdown, HTML and TXT among each other and to PDF, pictures included (task 2.12), and PDF to DOCX as a beta (CV-2, CV-5, tasks 2.3-2.5). Every input is read into the <see cref="Block"/>
 /// tree (Doc.cs), then written out; PDF is the HTML page printed by WebView2, or Word's own export for DOCX when Word is installed.
-/// Tool ids: convert.docx/md/html/txt/pdf.
+/// PDF to XLSX (beta) takes only the ruled tables, one sheet each. Tool ids: convert.docx/md/html/txt/pdf/xlsx.
 /// </summary>
 public sealed class DocumentEngine : IEngine
 {
@@ -21,7 +21,7 @@ public sealed class DocumentEngine : IEngine
     {
         var target = job.ToolId switch
         {
-            "convert.docx" or "convert.md" or "convert.html" or "convert.txt" or "convert.pdf" => job.ToolId["convert.".Length..],
+            "convert.docx" or "convert.md" or "convert.html" or "convert.txt" or "convert.pdf" or "convert.xlsx" => job.ToolId["convert.".Length..],
             _ => throw new EngineException("This conversion isn't available yet.", $"document: unsupported tool {job.ToolId}"),
         };
 
@@ -31,6 +31,20 @@ public sealed class DocumentEngine : IEngine
             var input = job.Inputs[i];
             var pictures = 0;
             var blocks = await ReadAsync(input, ct).ConfigureAwait(false);
+            if (target == "xlsx")
+            {
+                var tables = blocks.OfType<Table>().ToList();
+                if (tables.Count == 0)
+                {
+                    throw new EngineException($"{Path.GetFileName(input)} has no tables Morph can find. Only tables drawn with lines are found.");
+                }
+
+                Sheets.SheetEngine.WriteXlsx([.. tables.Select((t, n) => ($"Table {n + 1}", t.Rows.Select(r => r.Select(Runs.Plain).ToList()).ToList()))],
+                    namer.Reserve(input, ".xlsx").Path, ct);
+                progress.Report(new JobProgress((i + 1.0) / job.Inputs.Count, null));
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(Runs.Plain(blocks)) && (target == "txt" || !HasPicture(blocks)))
             {
                 throw new EngineException($"{Path.GetFileName(input)} has no text to convert.");

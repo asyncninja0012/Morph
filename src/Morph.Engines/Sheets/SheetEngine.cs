@@ -81,52 +81,63 @@ public sealed partial class SheetEngine : IEngine
         }
     }
 
+    internal static void WriteXlsx(List<List<string>> rows, string title, string output, CancellationToken ct) => WriteXlsx([(title, rows)], output, ct);
+
     // Streamed with OpenXmlWriter, so a big CSV doesn't build a DOM. Text goes in as inline strings, which Excel never evaluates.
-    internal static void WriteXlsx(List<List<string>> rows, string title, string output, CancellationToken ct)
+    /// <summary>One worksheet per entry; titles become sheet names (cleaned, max 31 characters, "Sheet<n>" if empty or taken).</summary>
+    internal static void WriteXlsx(IReadOnlyList<(string Title, List<List<string>> Rows)> sheets, string output, CancellationToken ct)
     {
         using var document = SpreadsheetDocument.Create(output, SpreadsheetDocumentType.Workbook);
         var workbook = document.AddWorkbookPart();
-        var worksheet = workbook.AddNewPart<WorksheetPart>();
-        using (var writer = OpenXmlWriter.Create(worksheet))
+        var list = new DocumentFormat.OpenXml.Spreadsheet.Sheets();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (title, rows) in sheets)
         {
-            writer.WriteStartElement(new Worksheet());
-            writer.WriteStartElement(new SheetData());
-            for (var r = 0; r < rows.Count; r++)
+            var worksheet = workbook.AddNewPart<WorksheetPart>();
+            using (var writer = OpenXmlWriter.Create(worksheet))
             {
-                ct.ThrowIfCancellationRequested();
-                writer.WriteStartElement(new Row { RowIndex = (uint)(r + 1) });
-                for (var c = 0; c < rows[r].Count; c++)
+                writer.WriteStartElement(new Worksheet());
+                writer.WriteStartElement(new SheetData());
+                for (var r = 0; r < rows.Count; r++)
                 {
-                    var value = rows[r][c];
-                    if (value.Length == 0)
+                    ct.ThrowIfCancellationRequested();
+                    writer.WriteStartElement(new Row { RowIndex = (uint)(r + 1) });
+                    for (var c = 0; c < rows[r].Count; c++)
                     {
-                        continue;
+                        var value = rows[r][c];
+                        if (value.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        var reference = ColumnName(c) + (r + 1).ToString(CultureInfo.InvariantCulture);
+                        writer.WriteElement(Number().IsMatch(value)
+                            ? new Cell { CellReference = reference, CellValue = new CellValue(value) }
+                            : new Cell(new InlineString(new Text(value) { Space = SpaceProcessingModeValues.Preserve }))
+                            {
+                                CellReference = reference,
+                                DataType = CellValues.InlineString,
+                            });
                     }
 
-                    var reference = ColumnName(c) + (r + 1).ToString(CultureInfo.InvariantCulture);
-                    writer.WriteElement(Number().IsMatch(value)
-                        ? new Cell { CellReference = reference, CellValue = new CellValue(value) }
-                        : new Cell(new InlineString(new Text(value) { Space = SpaceProcessingModeValues.Preserve }))
-                        {
-                            CellReference = reference,
-                            DataType = CellValues.InlineString,
-                        });
+                    writer.WriteEndElement();
                 }
 
                 writer.WriteEndElement();
+                writer.WriteEndElement();
             }
 
-            writer.WriteEndElement();
-            writer.WriteEndElement();
+            var sheetName = new string([.. title.Where(ch => ch is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\')).Take(31)]).Trim('\'');
+            if (sheetName.Length == 0 || !names.Add(sheetName))
+            {
+                sheetName = $"Sheet{list.Count() + 1}";
+                names.Add(sheetName);
+            }
+
+            list.Append(new Sheet { Id = workbook.GetIdOfPart(worksheet), SheetId = (uint)(list.Count() + 1), Name = sheetName });
         }
 
-        var sheetName = new string([.. title.Where(ch => ch is not ('[' or ']' or ':' or '*' or '?' or '/' or '\\')).Take(31)]).Trim('\'');
-        workbook.Workbook = new Workbook(new DocumentFormat.OpenXml.Spreadsheet.Sheets(new Sheet
-        {
-            Id = workbook.GetIdOfPart(worksheet),
-            SheetId = 1,
-            Name = sheetName.Length > 0 ? sheetName : "Sheet1",
-        }));
+        workbook.Workbook = new Workbook(list);
     }
 
     internal static List<(string Name, List<List<string>> Rows)> ReadXlsx(string input, CancellationToken ct)

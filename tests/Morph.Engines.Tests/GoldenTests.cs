@@ -103,6 +103,18 @@ public sealed class GoldenTests : IDisposable
         File.Copy(fixture, input);
         Assert.Equal(from, (await FileSniffer.Instance.DetectAsync(input, ct)).Id);
 
+        if (from == "pdf" && to == "xlsx")
+        {
+            // sample.pdf has no table: PDF → XLSX takes only ruled tables, so this row gets one drawn by Morph's own PDF.
+            var md = Path.Combine(_dir, "table.md");
+            await File.WriteAllTextAsync(md, "| Fruit | Count |\n| --- | --- |\n| Apples | 12 |\n| Pears | 3 |\n", ct);
+            var tablePdf = Assert.Single((await RunAsync("convert.pdf", "document", [md], ct)).Outputs);
+            var sheet = Assert.Single(SheetEngine.ReadXlsx(Assert.Single((await RunAsync("convert.xlsx", engine, [tablePdf], ct)).Outputs), ct));
+            Assert.Equal("Table 1", sheet.Name);
+            Assert.Equal([["Fruit", "Count"], ["Apples", "12"], ["Pears", "3"]], sheet.Rows);
+            return;
+        }
+
         var result = await RunAsync($"convert.{to}", engine, [input], ct);
         if (engine == "office")
         {
@@ -1013,6 +1025,29 @@ public sealed class GoldenTests : IDisposable
             var text = await File.ReadAllTextAsync(Assert.Single(outputs), ct);
             Assert.Contains("Morph sample page 1", text, StringComparison.Ordinal);
             Assert.Contains("Morph sample page 2", text, StringComparison.Ordinal);
+            return;
+        }
+
+        if (to == "pptx")
+        {
+            // One slide per page, each the page as a picture filling a 3×2 inch slide.
+            var pptx = Assert.Single(outputs);
+            Assert.Equal("pptx", (await FileSniffer.Instance.DetectAsync(pptx, ct)).Id);
+            using var deck = DocumentFormat.OpenXml.Packaging.PresentationDocument.Open(pptx, false);
+            Assert.Empty(new DocumentFormat.OpenXml.Validation.OpenXmlValidator().Validate(deck));
+            var size = deck.PresentationPart!.Presentation!.SlideSize!;
+            Assert.Equal((216 * 12700, 144 * 12700), (size.Cx!.Value, size.Cy!.Value));
+            var slides = deck.PresentationPart.SlideParts.ToList();
+            Assert.Equal(2, slides.Count);
+            foreach (var slide in slides)
+            {
+                using var stream = Assert.Single(slide.ImageParts).GetStream();
+                using var image = new MagickImage(stream);
+                Assert.Equal((450u, 300u), (image.Width, image.Height));
+                var box = image.GetPixels().GetPixel(80, 80)!.ToColor()!;
+                Assert.True(box.R > 200 && box.G < 60 && box.B < 60, $"expected red at (80,80), got {box}");
+            }
+
             return;
         }
 
