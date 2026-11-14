@@ -63,8 +63,6 @@ Tests: `dotnet run build/gen-fixtures.cs` once, then `dotnet test Morph.slnx --f
 Installer: `./build/installer.ps1` → `artifacts/Morph-<version>-setup.exe`. Packs: `./build/make-office-pack.ps1 -Version <LibreOffice version>`
 and `./build/make-bg-pack.ps1`.
 
-The plan, requirements and conventions are in [`docs/`](docs/) and [`CLAUDE.md`](CLAUDE.md).
-
 ## Licence
 
 MIT, see [LICENSE](LICENSE). Morph uses FFmpeg (LGPL, as separate replaceable programs), ImageMagick through Magick.NET, PDFium,
