@@ -1,3 +1,6 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
+
 using Morph.Core.Jobs;
 
 namespace Morph.Core.Tests;
@@ -46,5 +49,41 @@ public sealed class OutputNamerTests : IDisposable
         namer.AbortAll();
 
         Assert.Equal([Path.Combine(_dir, "keep.txt")], Directory.GetFileSystemEntries(_dir));
+    }
+
+    // Task 5.3: a folder Morph may not create files in (here: an ACL denying it to this user, like a read-only share or disc).
+    [Fact]
+    public void A_read_only_folder_sends_outputs_to_the_fallback()
+    {
+        var locked = ReadOnlyFolder();
+        var fallback = Directory.CreateDirectory(Path.Combine(_dir, "Downloads")).FullName;
+        var namer = new OutputNamer(locked, fallback);
+
+        var a = namer.Reserve(Path.Combine(locked, "photo.jpg"), ".png");
+        var b = namer.Reserve(Path.Combine(locked, "photo.jpg"), ".webp");
+
+        Assert.Equal([Path.Combine(fallback, "photo.png"), Path.Combine(fallback, "photo.webp")], [a.Path, b.Path]);
+        Assert.Empty(Directory.GetFileSystemEntries(locked));
+    }
+
+    [Fact]
+    public void A_read_only_folder_without_a_fallback_says_so()
+    {
+        var locked = ReadOnlyFolder();
+
+        var ex = Assert.Throws<EngineException>(() => new OutputNamer(locked).Reserve("photo.jpg", ".png"));
+
+        Assert.Equal($"Morph can't save in {locked}: the folder is read-only.", ex.UserMessage);
+    }
+
+    private string ReadOnlyFolder()
+    {
+        var dir = new DirectoryInfo(Path.Combine(_dir, "locked"));
+        dir.Create();
+        var acl = dir.GetAccessControl();
+        acl.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.CreateFiles | FileSystemRights.CreateDirectories,
+            AccessControlType.Deny));
+        dir.SetAccessControl(acl);
+        return dir.FullName;
     }
 }

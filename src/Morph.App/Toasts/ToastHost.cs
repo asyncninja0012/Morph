@@ -36,6 +36,17 @@ public sealed class ToastHost
 
         void Refresh()
         {
+            if (group.Status == JobStatus.Succeeded && Moved(jobs, group.Outputs) is { } moved)
+            {
+                // The target folder was read-only, so the Worker saved into Downloads instead: say so, or the result looks lost.
+                _groups.RemoveAll(g => g.Group == group);
+                var notice = Open();
+                notice.ShowFolderClicked += () => ShowInFolder(group.Outputs);
+                notice.Render(new ToastView("", title, $"Morph can't save in {moved.Wanted}, so the result is in {moved.Actual}.",
+                    CanShowFolder: true, CanCopyDetails: false));
+                return;
+            }
+
             if (group.Status is JobStatus.Running or JobStatus.Succeeded or JobStatus.Cancelled)
             {
                 return;
@@ -97,6 +108,14 @@ public sealed class ToastHost
             w.Top = bottom - height - Gap;
             bottom -= height + Gap / 2;
         }
+    }
+
+    // The first output saved outside every folder the drop asked for (OutputNamer's read-only fallback), with both folders.
+    internal static (string Wanted, string Actual)? Moved(IReadOnlyList<(JobRequest Request, JobHandle Handle)> jobs, IReadOnlyList<string> outputs)
+    {
+        var wanted = jobs.Select(j => Path.TrimEndingDirectorySeparator(j.Request.OutputDirectory)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var moved = outputs.Select(Path.GetDirectoryName).FirstOrDefault(d => d is not null && !wanted.Contains(d));
+        return moved is null ? null : (jobs[0].Request.OutputDirectory, moved);
     }
 
     // shortcut: selects the first output only; SHOpenFolderAndSelectItems can select them all if batches need it.

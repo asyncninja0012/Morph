@@ -16,7 +16,24 @@ internal static class HtmlPdfPrinter
 {
     private const string PageUrl = "https://morph.invalid/document.html";
 
-    public static Task PrintAsync(string html, string output, CancellationToken ct)
+    public static async Task PrintAsync(string html, string output, CancellationToken ct)
+    {
+        // WebView2 can't print to a path past MAX_PATH (task 5.3): print into temp, then copy into the reserved output.
+        var temp = Path.Combine(Path.GetTempPath(), $"morph-print-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            await PrintOnStaAsync(html, temp, ct).ConfigureAwait(false);
+            await using var source = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous);
+            await using var target = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous);
+            await source.CopyToAsync(target, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            File.Delete(temp);
+        }
+    }
+
+    private static Task PrintOnStaAsync(string html, string output, CancellationToken ct)
     {
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>

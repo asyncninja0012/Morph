@@ -7,15 +7,18 @@ public sealed record PendingOutput(string Path);
 /// Output naming for one job (JB-3). Each output appears under its final name as soon as it is reserved and fills in while
 /// the engine writes (developer's call, replaces JB-4's temp + rename). Never overwrites anything: a clash becomes
 /// "photo (2).png". A failed or cancelled job deletes its outputs; a killed Worker can leave a partial file behind.
+/// A folder Morph can't write in (a read-only share or disc, no permission) sends the outputs to <paramref name="fallbackDirectory"/>
+/// (the Worker passes Downloads, as for virtual files); the App tells the user where they went.
 /// </summary>
-public sealed class OutputNamer(string outputDirectory)
+public sealed class OutputNamer(string outputDirectory, string? fallbackDirectory = null)
 {
     private readonly List<string> _reserved = [];
+    private string _directory = outputDirectory;
 
     /// <summary>photo.jpg + ".png" → photo.png, or the first free "photo (n).png", created empty so nothing else takes it.</summary>
     public PendingOutput Reserve(string input, string extension, string suffix = "")
     {
-        var wanted = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(input) + suffix + extension);
+        var wanted = Path.Combine(_directory, Path.GetFileNameWithoutExtension(input) + suffix + extension);
         for (var n = 1; ; n++)
         {
             var candidate = n == 1 ? wanted : Numbered(wanted, n);
@@ -30,8 +33,24 @@ public sealed class OutputNamer(string outputDirectory)
             {
                 // Taken (by a file or a folder); try the next number.
             }
+            catch (Exception ex) when (CantWrite(ex) && fallbackDirectory is not null && _directory != fallbackDirectory)
+            {
+                _directory = fallbackDirectory;
+                return Reserve(input, extension, suffix);
+            }
+            catch (Exception ex) when (CantWrite(ex))
+            {
+                throw new EngineException($"Morph can't save in {_directory}: the folder is read-only.", ex.ToString());
+            }
         }
     }
+
+    // Access denied (permissions, read-only share) or write-protected media.
+    private static bool CantWrite(Exception ex) =>
+        ex is UnauthorizedAccessException || (ex is IOException && (ex.HResult & 0xFFFF) is ErrorAccessDenied or ErrorWriteProtect);
+
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorWriteProtect = 19;
 
     /// <returns>The outputs, in reservation order.</returns>
     public IReadOnlyList<string> CommitAll()

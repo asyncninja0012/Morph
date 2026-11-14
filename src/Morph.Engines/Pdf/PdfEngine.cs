@@ -304,7 +304,7 @@ public sealed class PdfEngine : IEngine
     internal static (nint Doc, int Pages) Open(string input)
     {
         var name = Path.GetFileName(input);
-        var doc = Pdfium.FPDF_LoadDocument(input, null);
+        var doc = Pdfium.LoadDocument(input);
         if (doc == 0)
         {
             var error = Pdfium.FPDF_GetLastError();

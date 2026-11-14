@@ -41,7 +41,7 @@ void Write(WorkerMessage message)
 }
 
 IEngine[] engines = [new ImagingEngine(), new MediaEngine(), new PdfEngine(), new DocumentEngine(), new SheetEngine(), new SubtitleEngine(), new ArchiveEngine(), new OcrEngine(), new OfficeEngine(), new BackgroundEngine()];
-var namer = new OutputNamer(request.OutputDirectory);
+var namer = new OutputNamer(request.OutputDirectory, Downloads());
 JobResult result;
 try
 {
@@ -55,6 +55,12 @@ try
     if (!Directory.Exists(request.OutputDirectory))
     {
         throw new EngineException("The folder for the result no longer exists.", request.OutputDirectory);
+    }
+
+    foreach (var input in request.Inputs.Where(CloudFiles.IsCloudOnly))
+    {
+        Write(new WorkerMessage(Progress: new JobProgress(double.NaN, "downloading")));
+        await Task.Run(() => CloudFiles.Hydrate(input), CancellationToken.None).WaitAsync(cts.Token);
     }
 
     await engine.RunAsync(request, namer, new SyncProgress<JobProgress>(p => Write(new WorkerMessage(Progress: p))), cts.Token);
@@ -79,3 +85,16 @@ catch (Exception ex) when (ex is not OutOfMemoryException)
 
 Write(new WorkerMessage(Result: result));
 return result.Status == JobStatus.Succeeded ? 0 : 1;
+
+// Where results go when the target folder is read-only (task 5.3); null if Windows can't say.
+static string? Downloads()
+{
+    try
+    {
+        return Windows.Storage.UserDataPaths.GetDefault().Downloads;
+    }
+    catch (System.Runtime.InteropServices.COMException)
+    {
+        return null;
+    }
+}
