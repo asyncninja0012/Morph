@@ -91,6 +91,13 @@ public sealed class ImagingEngine : IEngine
             {
                 image.Quality = (uint)Math.Clamp(q, 1, 100); // lossy outputs only: PNG reads it as zlib level + filter
             }
+            else if (outFormat == MagickFormat.Png && (long)image.Width * image.Height > 1_000_000)
+            {
+                // zlib level 1 + adaptive filter + RLE: a 12 MP photo in ~1.4 s instead of ~11 s at Magick's default (75, LZ),
+                // and no bigger (photo 15.8 vs 16.2 MB, screenshot the same). PRD §7: 12 MP JPG → PNG ≤ 1.5 s.
+                image.Quality = 15;
+                image.Settings.SetDefine(MagickFormat.Png, "compression-strategy", "3");
+            }
 
             var pending = namer.Reserve(input, "." + target);
             if (outFormat == MagickFormat.Heic)

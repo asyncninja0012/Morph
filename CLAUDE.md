@@ -14,6 +14,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Native binaries (once after clone, and when a pin changes): `./build/fetch-binaries.ps1` → `artifacts/binaries/` (LGPL ffmpeg/ffprobe, pdfium.dll; media tests skip without ffmpeg)
 - Build: `dotnet build Morph.slnx -c Debug` (warnings are errors)
 - Unit + golden tests (golden needs `tests/fixtures/`, see next line): `dotnet test Morph.slnx --filter-not-trait "Category=UI"` (xunit.v3 on Microsoft.Testing.Platform, set in `global.json`; VSTest `--filter` syntax does not work)
+- Speed targets (PRD §7, opt-in, on the reference laptop): `$env:MORPH_PERF=1; dotnet test --project tests/Morph.Engines.Tests -c Release --filter-trait "Category=Perf" --output Detailed`
 - UI smoke tests (needs an unlocked interactive desktop): `dotnet test --project tests/Morph.UiTests` (project not created yet; first end-to-end smoke test lands once a drop produces output)
 - Generate fixtures (once after clone, after fetch-binaries, and when the generator changes): `dotnet run build/gen-fixtures.cs` → `tests/fixtures/` (git-ignored; office samples only where Microsoft Office is installed)
 - LibreOffice tests (`OfficeEngineTests`) need the office pack or `$env:MORPH_SOFFICE` = a `soffice.exe` (unpack the MSI: `msiexec /a LibreOffice.msi /qn TARGETDIR=<dir>`); they skip otherwise

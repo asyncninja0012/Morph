@@ -86,7 +86,11 @@ public sealed partial class EditorShell : Window
     public static Task<EditResult?> EditAsync(IEditor editor, IReadOnlyList<string> files, JsonObject? lastSettings, ILogger log)
     {
         ArgumentOutOfRangeException.ThrowIfZero(files.Count);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var shell = new EditorShell(editor, files, lastSettings, log);
+        // PRD §7: editor window visible ≤ 400 ms after drop.
+        shell.ContentRendered += (_, _) => log.LogDebug("{Editor} shown {Ms:F0} ms after drop", editor.Title,
+            System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         shell.Show();
         shell.Activate();
         return shell._result.Task;
