@@ -1,6 +1,15 @@
 Morph includes the following third-party software.
 
 --------------------------------------------------------------------------------
+.NET 10 runtime and Windows Desktop runtime (bundled with Morph.exe and Morph.Worker.exe)
+https://github.com/dotnet/dotnet
+Licence: MIT (https://github.com/dotnet/dotnet/blob/main/LICENSE.TXT); third-party notices:
+https://github.com/dotnet/dotnet/blob/main/THIRD-PARTY-NOTICES.txt
+--------------------------------------------------------------------------------
+Inno Setup 6.7.3 (the installer and uninstaller of Morph-<version>-setup.exe)
+https://jrsoftware.org/isinfo.php
+Licence: Inno Setup License (https://jrsoftware.org/files/is/license.txt)
+--------------------------------------------------------------------------------
 Magick.NET-Q8-x64 14.17.2
 https://github.com/dlemstra/Magick.NET
 Licence: Apache-2.0 (https://github.com/dlemstra/Magick.NET/blob/main/License.txt)
@@ -12,13 +21,16 @@ libheif and libde265 are licensed under the GNU Lesser General Public License v3
 replaceable library that Morph loads at run time; you may replace it with your own build.
 Source of that DLL and the exact library versions: https://github.com/dlemstra/Magick.Native (tag matching
 Magick.NET 14.17.2); https://github.com/strukturag/libheif; https://github.com/strukturag/libde265
-(written source offer to follow with the 1.0 release, PLAN 5.4).
+See "Source code offer" at the end.
 --------------------------------------------------------------------------------
 FFmpeg 9.0.2 (ffmpeg.exe, ffprobe.exe), LGPL build
 https://ffmpeg.org/  Build: https://github.com/BtbN/FFmpeg-Builds (win64-lgpl variant)
 Licence: GNU Lesser General Public License v2.1 or later (https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 Shipped as separate, replaceable executables. Morph does not link to FFmpeg.
-Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 (written source offer to follow with the 1.0 release, PLAN 5.4)
+Exact build: ffmpeg-n9.0.2-45-g1e65c6cd5d-win64-lgpl-9.0 (BtbN autobuild-2026-11-03-12-50), i.e. FFmpeg commit
+1e65c6cd5d on the release/9.0 branch: https://github.com/FFmpeg/FFmpeg/tree/1e65c6cd5d
+Build scripts and the versions of the libraries built into it: https://github.com/BtbN/FFmpeg-Builds
+See "Source code offer" at the end.
 --------------------------------------------------------------------------------
 PDFium (pdfium.dll), chromium/8125 build
 https://pdfium.googlesource.com/pdfium/  Build: https://github.com/bblanchon/pdfium-binaries (MIT)
@@ -80,3 +92,18 @@ LibreOffice, https://www.libreoffice.org/
 Licence: Mozilla Public License 2.0 and others (https://www.libreoffice.org/about-us/licenses/)
 Source: https://download.documentfoundation.org/libreoffice/src/ (the version in the pack)
 --------------------------------------------------------------------------------
+================================================================================
+Source code offer
+
+Morph's own source is at https://github.com/asyncninja0012/Morph (MIT).
+
+FFmpeg (ffmpeg.exe, ffprobe.exe; LGPL-2.1-or-later) and libheif / libde265 (inside Magick.Native-Q8-x64.dll;
+LGPL-3.0) are used as separate, replaceable files: you may swap in your own builds, and Morph keeps working with any
+compatible version. Their source is at the links above. In addition, for three years after the last Morph release
+that contains them, anyone may ask for a copy of the complete corresponding source code of these exact builds, for
+no more than the cost of providing it: open an issue at https://github.com/asyncninja0012/Morph/issues titled
+"Source request" naming the Morph version.
+
+LibreOffice in the office pack (MPL-2.0 and others) is unmodified; its source is at
+https://download.documentfoundation.org/libreoffice/src/ (the version in the pack's name), and the same request
+route applies.

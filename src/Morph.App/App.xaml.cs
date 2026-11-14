@@ -129,8 +129,8 @@ public sealed partial class App : Application
         var console = PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
         _logs = new FileLoggerProvider(Path.Combine(DataDirectory(), "logs"), console ? LogLevel.Debug : LogLevel.Information, echo: console ? Console.Out : null);
         _log = _logs.CreateLogger("Morph");
-        DispatcherUnhandledException += (_, args) => _log.LogCritical(args.Exception, "Unhandled UI exception");
-        AppDomain.CurrentDomain.UnhandledException += (_, args) => _log.LogCritical(args.ExceptionObject as Exception, "Unhandled exception");
+        DispatcherUnhandledException += (_, args) => Crashed(args.Exception, "Unhandled UI exception");
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => Crashed(args.ExceptionObject as Exception, "Unhandled exception");
         TaskScheduler.UnobservedTaskException += (_, args) => _log.LogError(args.Exception, "Unobserved task exception");
         _log.LogInformation("Morph {Version} starting on {Os}; logs in {Logs}",
             typeof(App).Assembly.GetName().Version, Environment.OSVersion.VersionString, _logs.Directory);
@@ -198,6 +198,8 @@ public sealed partial class App : Application
         _tray.FloatClicked += () => _float!.Toggle();
         _tray.SettingsClicked += ShowSettings;
         _toasts = new ToastHost(Jobs, Dispatcher, _log);
+        _tray.ReportClicked += ReportProblem;
+        _ = TellAboutLastCrashAsync();
         _actions = new ActionRunner(_toasts, _toolSettings!, _log);
         _float = new FloatShelf(_toolSettings!, _log);
         _ = _float.LoadAsync();
@@ -704,6 +706,59 @@ public sealed partial class App : Application
         _onboarding.Activate();
     }
 
+    // A crash is saved next to the logs (PLAN 5.4); nothing leaves the PC unless the user sends the issue Report a problem opens.
+    private void Crashed(Exception? exception, string what)
+    {
+        _log.LogCritical(exception, "{What}", what);
+        if (exception is null)
+        {
+            return;
+        }
+
+        try
+        {
+            CrashReport.Write(_logs!.Directory, exception, typeof(App).Assembly.GetName().Version, DateTime.Now);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogError(ex, "Couldn't save the crash file");
+        }
+    }
+
+    private async Task TellAboutLastCrashAsync()
+    {
+        try
+        {
+            if (await Task.Run(() => CrashReport.TakeUnseen(_logs!.Directory)) is not null)
+            {
+                _toasts!.ShowMessage("Morph closed unexpectedly", "Last time Morph stopped because of an error. To tell the developer, choose Report a problem in the tray menu.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogWarning(ex, "Couldn't check for a crash file");
+        }
+    }
+
+    // Opens a pre-filled GitHub issue in the browser (with the latest crash from the last week, if any); the user reviews and sends it.
+    private async void ReportProblem()
+    {
+        string? crash = null;
+        try
+        {
+            crash = await Task.Run(() => CrashReport.Latest(_logs!.Directory) is { } file && File.GetLastWriteTime(file) > DateTime.Now.AddDays(-7)
+                ? File.ReadAllText(file)
+                : null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogWarning(ex, "Couldn't read the crash file for the report");
+        }
+
+        _log.LogInformation("Report a problem opened{Crash}", crash is null ? "" : " with the latest crash");
+        Process.Start(new ProcessStartInfo(CrashReport.IssueUrl(typeof(App).Assembly.GetName().Version, crash).AbsoluteUri) { UseShellExecute = true })?.Dispose();
+    }
+
     private async void ShowSettings()
     {
         if (_settingsWindow is not null)
@@ -725,6 +780,7 @@ public sealed partial class App : Application
             _bgPack = PackStore.Installed(InstalledPacks.Root, "bg-model", "model.onnx") is not null;
         });
         _settingsWindow.TourClicked += ShowOnboarding;
+        _settingsWindow.ReportClicked += ReportProblem;
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.Activate();

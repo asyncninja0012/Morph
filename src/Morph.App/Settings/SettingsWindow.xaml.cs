@@ -71,6 +71,9 @@ public sealed partial class SettingsWindow : Window
 
     public event Action? PacksChanged;
 
+    /// <summary>About → Report a problem.</summary>
+    public event Action? ReportClicked;
+
     /// <summary>About → Show the tour again.</summary>
     public event Action? TourClicked;
 
@@ -504,6 +507,7 @@ public sealed partial class SettingsWindow : Window
         LicencesButton.IsEnabled = File.Exists(notices);
         UpdateLink.Click += (_, _) => Process.Start(new ProcessStartInfo(UpdateLink.NavigateUri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
         TourButton.Click += (_, _) => TourClicked?.Invoke();
+        ReportButton.Click += (_, _) => ReportClicked?.Invoke();
         UpdateButton.Click += (_, _) => CheckForUpdatesAsync();
         LogsButton.Click += (_, _) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_host.LogsFolder}\"") { UseShellExecute = false })?.Dispose();
     }

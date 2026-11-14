@@ -10,7 +10,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace Morph.App.Tray;
 
 /// <summary>
-/// Morph's notification-area icon: a click opens the job history; the menu has Job history, Float shelf, Open logs folder and Quit. Shell_NotifyIcon through CsWin32 rather than WinForms
+/// Morph's notification-area icon: a click opens the job history; the menu has Job history, Float shelf, Settings, Open logs folder, Report a problem and Quit. Shell_NotifyIcon through CsWin32 rather than WinForms
 /// NotifyIcon: WinForms would add ~13 MB to an MSIX that is already over its size budget (PLAN R3).
 /// </summary>
 internal sealed class TrayIcon : IDisposable
@@ -21,6 +21,7 @@ internal sealed class TrayIcon : IDisposable
     private const uint HistoryCommand = 3;
     private const uint FloatCommand = 4;
     private const uint SettingsCommand = 5;
+    private const uint ReportCommand = 6;
     private const uint NinKeySelect = PInvoke.NIN_SELECT | 0x1; // NIN_SELECT | NINF_KEY; not in the CsWin32 metadata
 
     private readonly HwndSource _window;
@@ -55,6 +56,8 @@ internal sealed class TrayIcon : IDisposable
     public event Action? SettingsClicked;
 
     public event Action? OpenLogsClicked;
+
+    public event Action? ReportClicked;
 
     public event Action? QuitClicked;
 
@@ -129,6 +132,7 @@ internal sealed class TrayIcon : IDisposable
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, FloatCommand, "Float shelf");
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, SettingsCommand, "Settings");
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, OpenLogsCommand, "Open logs folder");
+            Append(menu, MENU_ITEM_FLAGS.MF_STRING, ReportCommand, "Report a problem");
             Append(menu, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, null);
             Append(menu, MENU_ITEM_FLAGS.MF_STRING, QuitCommand, "Quit Morph");
 
@@ -153,6 +157,9 @@ internal sealed class TrayIcon : IDisposable
                     break;
                 case OpenLogsCommand:
                     OpenLogsClicked?.Invoke();
+                    break;
+                case ReportCommand:
+                    ReportClicked?.Invoke();
                     break;
                 case QuitCommand:
                     QuitClicked?.Invoke();
