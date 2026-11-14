@@ -49,6 +49,17 @@ Filename: "{app}\Morph.exe"; Description: "Start Morph"; Flags: nowait postinsta
 [Registry]
 ; Settings > Start Morph when I sign in writes this value; nothing is written here, it's only removed on uninstall.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Morph"; Flags: uninsdeletevalue
+; "Morph" in the classic right-click menu (Windows 11: Show more options) for files and folders (4.7). Morph.exe --wheel hands
+; over to the running Morph, which opens the keyboard wheel on the Explorer selection. The Windows 11 menu itself needs package
+; identity, so a signed MSIX (R9).
+Root: HKCU; Subkey: "Software\Classes\*\shell\Morph"; ValueType: string; ValueName: ""; ValueData: "Morph"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\*\shell\Morph"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\Morph.exe"
+Root: HKCU; Subkey: "Software\Classes\*\shell\Morph"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"
+Root: HKCU; Subkey: "Software\Classes\*\shell\Morph\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Morph.exe"" --wheel"
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\Morph"; ValueType: string; ValueName: ""; ValueData: "Morph"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\Morph"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\Morph.exe"
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\Morph"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\Morph\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Morph.exe"" --wheel"
 
 [UninstallDelete]
 ; The large, re-downloadable parts of Morph's data; settings and logs stay (in %LOCALAPPDATA%\Morph) for a reinstall.

@@ -29,7 +29,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 ## Solution map
 | Project | Owns |
 |---|---|
-| `src/Morph.App` | WPF exe: tray, settings, onboarding, toasts, job history, single-instance + IPC pipe; composition root |
+| `src/Morph.App` | WPF exe: tray, settings, onboarding, toasts, job history, single instance (mutex + named events; `--wheel` from the Explorer verb); composition root |
 | `src/Morph.Overlay` | Raw-input drag detection, keyboard hook, drop-catcher + wheel windows, hotkey, Explorer selection |
 | `src/Morph.Core` | FileKind sniffing, capability matrix (`capabilities.json`), ToolDescriptor, jobs/queue, output naming, undo, settings. No WPF references |
 | `src/Morph.Worker` | Console exe that runs one job per process; hosts engines; JSON lines over stdio |

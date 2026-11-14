@@ -66,6 +66,9 @@ public sealed partial class App : Application
     private readonly List<string> _playbackFolders = [];
 
     private readonly DragGestureDetector _dragGestures = new();
+    private const string WheelSignal = @"Local\Morph.Wheel", ShowSignal = @"Local\Morph.Show";
+    private static Mutex? _instance; // held for the life of the process
+    private long _lastWheelVerb;
     private readonly JobHistory _history = new(TimeProvider.System);
     private HistoryWindow? _historyWindow;
     private FileLoggerProvider? _logs;
@@ -90,6 +93,37 @@ public sealed partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // One Morph per sign-in. A second start hands over and exits: `--wheel` (the "Morph" entry Setup adds to Explorer's
+        // right-click menu, 4.7) opens the keyboard wheel on the Explorer selection; anything else (Start menu) shows Settings.
+        var wheelVerb = e.Args.Contains("--wheel");
+        _instance = new Mutex(true, @"Local\Morph.App", out var first);
+        if (!first)
+        {
+            PInvoke.AllowSetForegroundWindow(unchecked((uint)-1)); // ASFW_ANY: Explorer started us in front, so the running Morph may come forward
+            if (EventWaitHandle.TryOpenExisting(wheelVerb ? WheelSignal : ShowSignal, out var signal))
+            {
+                signal.Set();
+                signal.Dispose();
+            }
+
+            Environment.Exit(0);
+        }
+
+        var signals = new[] { new EventWaitHandle(false, EventResetMode.AutoReset, WheelSignal), new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignal) };
+        new Thread(() =>
+        {
+            while (true)
+            {
+                var which = WaitHandle.WaitAny(signals);
+                Dispatcher.BeginInvoke(which == 0 ? OnWheelVerb : ShowSettings);
+            }
+        })
+        { IsBackground = true, Name = "Morph second start" }.Start();
+        if (wheelVerb)
+        {
+            _ = Dispatcher.BeginInvoke(OnWheelVerb, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
 
         // Started from a terminal (dev): echo the log there too, with drag and wheel detail.
         var console = PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
@@ -254,6 +288,20 @@ public sealed partial class App : Application
             _log.LogInformation("{Tool} {Status} in {Ms:F0} ms: {Inputs} -> {Outputs}", u.Request.ToolId, r.Status,
                 r.Elapsed.TotalMilliseconds, string.Join(", ", u.Request.Inputs), string.Join(", ", r.Outputs));
         }
+    }
+
+    // Explorer's "Morph" verb: like the hotkey, on the window the menu was opened in. A legacy verb may start Morph once per
+    // selected file, so repeats within a second are dropped.
+    private void OnWheelVerb()
+    {
+        if (Stopwatch.GetElapsedTime(_lastWheelVerb) < TimeSpan.FromSeconds(1))
+        {
+            return;
+        }
+
+        _lastWheelVerb = Stopwatch.GetTimestamp();
+        _log.LogInformation("Explorer menu: Morph");
+        OnHotkey(PInvoke.GetForegroundWindow());
     }
 
     // The keyboard path (IX-5): the selection in the Explorer window or desktop in front opens the wheel at the cursor.

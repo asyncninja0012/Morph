@@ -30,3 +30,5 @@ FO_MOVE
 SHGetFileInfo
 SHGFI_FLAGS
 FILE_FLAGS_AND_ATTRIBUTES
+AllowSetForegroundWindow
+GetForegroundWindow
