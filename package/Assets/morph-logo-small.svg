@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<title>Morph (16-24 px)</title>
+<!-- Tray and small icon sizes: thicker ring and wedge, no pointer (it turns to a smudge below 32 px). -->
+<defs>
+  <linearGradient id="glassFill" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0" stop-color="#FFFFFF"/>
+    <stop offset="1" stop-color="#FFD3B8"/>
+  </linearGradient>
+  <linearGradient id="orangeFill" x1=".15" y1="0" x2=".85" y2="1">
+    <stop offset="0" stop-color="#FF9A3C"/>
+    <stop offset="1" stop-color="#E0600E"/>
+  </linearGradient>
+</defs>
+<!-- The dark outline keeps the white ring visible on a light taskbar. -->
+<path d="M448.47,215.09 A22,22 0 0 1 474.94,234.45 A220,220 0 1 1 227.74,37.82 A22,22 0 0 1 252.57,59.26 L253.73,125.87 A22,22 0 0 1 235.78,147.88 A110,110 0 1 0 365.90,251.38 A22,22 0 0 1 383.31,228.94 Z"
+      fill="url(#glassFill)" stroke="#6E4632" stroke-width="20" stroke-linejoin="round" paint-order="stroke"/>
+<path transform="translate(8 -10)" d="M269.73,59.71 A22,22 0 0 1 295.64,39.60 A220,220 0 0 1 456.38,165.19 A22,22 0 0 1 443.14,195.19 L379.78,215.78 A22,22 0 0 1 353.49,205.05 A110,110 0 0 0 281.85,149.08 A22,22 0 0 1 265.08,126.16 Z"
+      fill="url(#orangeFill)" stroke="#8A3206" stroke-width="20" stroke-linejoin="round" paint-order="stroke"/>
+</svg>
