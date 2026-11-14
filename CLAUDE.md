@@ -21,6 +21,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Run: `dotnet run --project src/Morph.App`
 - Dev signing cert (once): `./build/dev-cert.ps1`, then run the printed `Import-Certificate` line in an elevated PowerShell
 - Installer (the release): `./build/installer.ps1 [-Version x.y.z]` → `artifacts/Morph-<version>-setup.exe` + `.sha256` (Inno Setup from the `Tools.InnoSetup` NuGet package, nothing to install). A `v*` tag runs `.github/workflows/release.yml`, which makes a draft GitHub Release with it.
+- Release: add `docs/release-notes/<version>.md` (the workflow uses it as the release text), bump `<Version>` in `Directory.Build.props`, push a `v<version>` tag; after publishing, `./build/winget.ps1 -Version <version>` → `artifacts/winget/<version>/` for a microsoft/winget-pkgs PR.
 - Packs: `./build/make-office-pack.ps1 -Version <LibreOffice version>`, `./build/make-bg-pack.ps1` → `artifacts/packs/*.zip`; each prints its `PackStore.Known` line. Upload to a `pack-<id>-<version>` release (not "latest"), then add the line.
 - Package (MSIX, dev/size budget only since D12): `./build/pack.ps1 -Configuration Release` → `artifacts/Morph_x64.msix` (signed with the dev cert; `-NoSign` for CI/Store). Install: `Add-AppxPackage artifacts/Morph_x64.msix`
 - From Git Bash, run any `.ps1` as `powershell.exe -NoProfile -ExecutionPolicy Bypass -File build/<name>.ps1`

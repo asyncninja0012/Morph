@@ -17,6 +17,10 @@ files in File Explorer and press **Alt+Shift+Space**. Every job can be undone fo
 Morph is free and open source (MIT). It has no account, no telemetry and no ads, and it uses the network only to download an
 optional pack you ask for, or to check for a new version when you click "Check for updates".
 
+| The Convert wheel on a JPG | Crop editor | Settings → Packs |
+|---|---|---|
+| ![The Convert wheel open over File Explorer, PNG highlighted](docs/screenshots/wheel.png) | ![The crop editor with a 1:1 box on a sunset picture](docs/screenshots/crop-editor.png) | ![Settings, Packs tab](docs/screenshots/settings-packs.png) |
+
 ## Install
 
 1. Download `Morph-<version>-setup.exe` from [Releases](https://github.com/asyncninja0012/Morph/releases).
@@ -37,6 +41,11 @@ Two tools need a larger download, offered the first time you use them:
 | Background pack | Remove background (BiRefNet-lite model, ONNX Runtime) | ~165 MB download, 200 MB on disk |
 
 They can be removed in Settings → Packs.
+
+## Problems
+
+Tray icon → **Report a problem** (or Settings → About) opens a new GitHub issue in your browser, filled in with Morph's version
+and, if Morph crashed, the error; nothing is sent until you submit it. Attach the log from tray icon → Open logs folder.
 
 ## Build from source
 

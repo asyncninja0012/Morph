@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.0 (14 Nov 2026)
+
+First stable release; user-facing notes in `docs/release-notes/1.0.0.md`. Everything below up to here shipped in it.
+
 Phase 2 complete (10 Nov 2026, alpha): documents, PDF, sheets, subtitles and archives conversions, instant tools, Protect/Unlock, job history with Cancel and Undo, the Alt+Shift+Space keyboard wheel, pictures and ruled tables in documents.
 
 Phase 1 complete (5 Nov 2026): image, video and audio conversions from the wheel, job queue, failure toasts, golden tests, logging and tray icon.
@@ -9,6 +13,7 @@ Phase 1 complete (5 Nov 2026): image, video and audio conversions from the wheel
 Phase 0 (spikes) complete: drag wheel, image and video conversion in a sandboxed worker, MSIX packaging.
 
 ### Added
+- Release 1.0 (task 5.5): version 1.0.0, release notes, screenshots in the README, a "Problems" section, and `build/winget.ps1` for the winget manifests. The release is still unsigned (no trusted certificate yet). Defender finds nothing in the installer.
 - Crash log and Report a problem (task 5.4): if Morph crashes, the error is saved as a crash file next to the logs (nothing is sent anywhere), and the next start says so. "Report a problem" in the tray menu and in Settings → About opens a new GitHub issue in your browser, filled in with Morph's version, your Windows build and the latest crash, for you to read, complete and send; attach the log by hand. The third-party notices now list the bundled .NET runtime and Inno Setup, name the exact FFmpeg build, and end with a source code offer for FFmpeg, libheif/libde265 and LibreOffice. Not checked in the running app.
 - Awkward files and folders (task 5.3): PDFs in very long folder paths or with names outside your Windows language (emoji, other alphabets) now open; before, they were reported as damaged. Markdown/HTML to PDF works in very long paths too. When the folder next to the original can't be written to (a read-only share, a disc, a folder you lack permission for), the result goes to Downloads and a note says so, with Show in folder. A OneDrive file that's only in the cloud is downloaded first; if that fails Morph says to check you're online and OneDrive is running, instead of calling the file damaged. Tests: every engine on a long, non-English path; read-only fallback. Checked live: a cloud-only OneDrive PDF with OneDrive closed gives the new message. Not checked: the Downloads note in the running app, a successful OneDrive download.
 - Accessibility (task 5.2): Morph follows Windows' text size (Settings → Accessibility → Text size): text in every window grows, and windows widen to fit (never past the screen); wheel labels grow up to 1.5×. Narrator now reaches the editors' crop box, picture, timelines and page grid and reads their key help, names the chip groups (Shape, Tool, Colour, Line width, Cut), reads changing text such as the crop size and the trim time, says which page has focus in the page organizer, and says what the wheel opened and which wedge or preset is highlighted (icons are no longer read as noise). In high contrast, Morph drops the glass and orange and uses the system colours, including the wheel and the editors' selection marks. Checked in the UI Automation tree on the Crop editor; not checked live: high contrast, a larger text size, and Narrator's speech.

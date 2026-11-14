@@ -38,5 +38,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create $env:GITHUB_REF_NAME --draft --title "Morph $version" --generate-notes `
+          # Hand-written notes in docs/release-notes/<version>.md when there are some, else GitHub's list of changes.
+          $notes = "docs/release-notes/$version.md"
+          $notesArgs = if (Test-Path $notes) { @('--notes-file', $notes) } else { @('--generate-notes') }
+          gh release create $env:GITHUB_REF_NAME --draft --title "Morph $version" @notesArgs `
             "artifacts/Morph-$version-setup.exe" "artifacts/Morph-$version-setup.exe.sha256"
