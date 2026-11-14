@@ -11,6 +11,20 @@ public static class MorphTheme
 {
     public static void Apply(FrameworkElement root, bool dark, bool glass)
     {
+        if (root is Window window)
+        {
+            Accessible.Attach(window);
+        }
+
+        if (SystemParameters.HighContrast)
+        {
+            // Fluent's own high-contrast styles colour the controls; Morph's surfaces become the system window colours.
+            root.Resources["MorphSurfaceBrush"] = SystemColors.WindowBrush;
+            root.Resources["MorphCardBrush"] = SystemColors.WindowBrush;
+            root.Resources["MorphCardStrokeBrush"] = SystemColors.WindowTextBrush;
+            return;
+        }
+
         var accent = MorphGlass.Accent(dark);
         var onAccent = MorphGlass.OnAccent(dark);
         var hover = Blend(accent, dark ? Colors.White : Colors.Black, 0.1);

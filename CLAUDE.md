@@ -50,6 +50,7 @@ Offline Windows 11 utility: drag files, tap a key, a radial wheel opens at the c
 - Use built-in .NET/Windows APIs before writing code or adding packages (`System.Text.Json` source-gen, `System.IO.Compression`, `FileSystem.DeleteFile(... SendToRecycleBin)`, WinForms `NotifyIcon`, `Windows.Media.Ocr`).
 - Look: Morph glass (warm frosted glass, Morph orange, light/dark with Windows). Overlay surfaces use `Morph.Overlay.Theme.MorphGlass`; App windows call `MorphTheme.Apply` and use the `MorphSurfaceBrush`/`MorphCardBrush` resources. Inspired by Tangerine's feel, never its exact colours or layout.
 - Look: Morph glass (warm frosted glass, Morph orange, light/dark with Windows). Overlay surfaces use `Morph.Overlay.Theme.MorphGlass`; App windows call `MorphTheme.Apply` and use the `MorphSurfaceBrush`/`MorphCardBrush` resources. Inspired by Tangerine's feel, never its exact colours or layout.
+- Accessibility (PRD §7): windows get text scaling, live-region events and high contrast through `MorphTheme.Apply` (`Morph.Overlay.Theme.Accessible`); don't hard-code colours that must follow high contrast (`MorphGlass.Accent`/`Mark`). A focusable or named panel needs `SurfaceGrid`/`SurfaceWrapPanel`/`ChipGroup` (`Morph.Editors`): plain WPF panels are invisible to Narrator. Text set on a `LiveSetting` TextBlock is announced; a window that never takes focus speaks through `Accessible.Announce`.
 - Don't reformat code you aren't changing. Keep diffs small.
 
 ## Engines and licences

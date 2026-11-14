@@ -22,13 +22,16 @@ public static partial class MorphGlass
 
     public static bool IsDark() => Registry.GetValue(Personalize, "AppsUseLightTheme", 1) is 0;
 
-    /// <summary>Settings → Personalization → Colors → Transparency effects; off means solid surfaces.</summary>
-    public static bool TransparencyEnabled() => Registry.GetValue(Personalize, "EnableTransparency", 1) is not 0;
+    /// <summary>Settings → Personalization → Colors → Transparency effects; off means solid surfaces. Always off in high contrast.</summary>
+    public static bool TransparencyEnabled() => !SystemParameters.HighContrast && Registry.GetValue(Personalize, "EnableTransparency", 1) is not 0;
 
-    /// <summary>Morph orange. Light mode is deep enough for white text (about 5:1).</summary>
-    public static Color Accent(bool dark) => dark ? Rgb(0xFF, 0x9A, 0x5C) : Rgb(0xC9, 0x4F, 0x0E);
+    /// <summary>Morph orange (light mode deep enough for white text, about 5:1); the system highlight in high contrast.</summary>
+    public static Color Accent(bool dark) => SystemParameters.HighContrast ? SystemColors.HighlightColor : dark ? Rgb(0xFF, 0x9A, 0x5C) : Rgb(0xC9, 0x4F, 0x0E);
 
-    public static Color OnAccent(bool dark) => dark ? Rgb(0x2B, 0x12, 0x04) : Colors.White;
+    public static Color OnAccent(bool dark) => SystemParameters.HighContrast ? SystemColors.HighlightTextColor : dark ? Rgb(0x2B, 0x12, 0x04) : Colors.White;
+
+    /// <summary>The editors' marks on pictures and timelines (selection, playhead): Morph orange, or the system highlight in high contrast.</summary>
+    public static Brush Mark(Brush normal) => SystemParameters.HighContrast ? SystemColors.HighlightBrush : normal;
 
     /// <summary>
     /// Acrylic (system backdrop) behind a normal, activatable window with a transparent WPF background. Windows shows it

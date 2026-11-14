@@ -25,9 +25,12 @@ public sealed partial class PageEditor : UserControl, IEditor
     private const double TileHeight = 152;
     private const double Gap = 4; // margin around each tile
 
-    private static readonly Brush Accent = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
-    private static readonly Brush Picked = Frozen(new SolidColorBrush(Color.FromArgb(0x33, 0xF2, 0x8C, 0x28)));
-    private static readonly Brush Focused = Frozen(new SolidColorBrush(Color.FromArgb(0x99, 0x80, 0x80, 0x80)));
+    private static readonly Brush Orange = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
+    private static Brush Accent => Overlay.Theme.MorphGlass.Mark(Orange);
+    private static readonly Brush PickedTint = Frozen(new SolidColorBrush(Color.FromArgb(0x33, 0xF2, 0x8C, 0x28)));
+    private static Brush Picked => Overlay.Theme.MorphGlass.Mark(PickedTint);
+    private static readonly Brush FocusedGrey = Frozen(new SolidColorBrush(Color.FromArgb(0x99, 0x80, 0x80, 0x80)));
+    private static Brush Focused => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : FocusedGrey;
 
     private readonly PageSheetLoader _load;
     private readonly Stack<IReadOnlyList<PagePick>> _undo = new();
@@ -477,5 +480,10 @@ public sealed partial class PageEditor : UserControl, IEditor
         Summary.Text = $"{_pages.Count} of {_count} pages{(files > 1 ? $", saved as {files} files" : "")}{(_selected.Count > 0 ? $". {_selected.Count} selected" : "")}.";
         SplitButton.IsEnabled = Targets().Max() < _pages.Count - 1;
         DeleteButton.IsEnabled = Targets().Count < _pages.Count;
+        if (Tiles.IsKeyboardFocused && _focus < Tiles.Children.Count)
+        {
+            // The tiles are drawn, not controls, so Narrator hears the page the keys moved to from here.
+            Overlay.Theme.Accessible.Announce(Tiles, AutomationProperties.GetName(Tiles.Children[_focus]));
+        }
     }
 }

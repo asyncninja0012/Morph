@@ -26,7 +26,8 @@ public sealed partial class TrimEditor : UserControl, IEditor
 {
     private const double Grab = 8; // DIPs from a handle or split that pick it up
 
-    private static readonly Brush Accent = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
+    private static readonly Brush Orange = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
+    private static Brush Accent => Overlay.Theme.MorphGlass.Mark(Orange);
     private static readonly Brush Dim = Frozen(new SolidColorBrush(Color.FromArgb(0xB0, 0, 0, 0)));
 
     private static readonly (string Id, string Label, Key Key)[] ModeList = [("fast", "Fast cut", Key.F), ("exact", "Exact cut", Key.E)];

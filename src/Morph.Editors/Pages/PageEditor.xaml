@@ -1,6 +1,7 @@
 <UserControl x:Class="Morph.Editors.Pages.PageEditor"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Morph.Editors"
              Focusable="True" IsTabStop="False" FocusVisualStyle="{x:Null}">
     <StackPanel>
         <WrapPanel Margin="0,0,0,8">
@@ -12,7 +13,7 @@
         </WrapPanel>
         <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <Grid>
-                <WrapPanel x:Name="Tiles" Background="Transparent" Focusable="True" FocusVisualStyle="{x:Null}"
+                <local:SurfaceWrapPanel x:Name="Tiles" Background="Transparent" Focusable="True" FocusVisualStyle="{x:Null}"
                            AutomationProperties.Name="Pages. Arrow keys move, Shift with arrows selects, Ctrl with arrows moves the selected pages, R and L turn them, Delete removes them, K keeps only them, S splits after." />
                 <Canvas IsHitTestVisible="False">
                     <Rectangle x:Name="DropMark" Width="4" Visibility="Collapsed" RadiusX="2" RadiusY="2" />

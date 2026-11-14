@@ -24,7 +24,8 @@ public sealed partial class FramesEditor : UserControl, IEditor
 {
     private const double ThumbWidth = 112;
 
-    private static readonly Brush Accent = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
+    private static readonly Brush Orange = Frozen(new SolidColorBrush(Color.FromRgb(0xF2, 0x8C, 0x28)));
+    private static Brush Accent => Overlay.Theme.MorphGlass.Mark(Orange);
 
     private readonly TimelineLoader _timeline;
     private readonly PlaybackLoader _playback;

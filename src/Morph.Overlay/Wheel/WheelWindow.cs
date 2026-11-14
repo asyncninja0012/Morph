@@ -49,6 +49,7 @@ internal sealed class WheelWindow : Window
     private int? _highlighted;
     private int? _expanded; // wedge whose presets are on the outer ring
     private int? _highlightedChoice;
+    private double _textScale = 1;
 
     public WheelWindow()
     {
@@ -70,6 +71,7 @@ internal sealed class WheelWindow : Window
         _items = items;
         _glass = MorphGlass.TransparencyEnabled();
         _palette = Palette.For(dark, _glass);
+        _textScale = Math.Min(Accessible.TextScale, 1.5); // more doesn't fit a wedge
         _highlighted = null;
         _expanded = null;
         _highlightedChoice = null;
@@ -94,10 +96,10 @@ internal sealed class WheelWindow : Window
             var mid = i * 360.0 / items.Count;
             var anchor = WheelGeometry.PointAt(mid, WheelGeometry.ContentRadius);
             var icon = Text(items[i].Glyph, 16, FontWeights.Normal, anchor + new Vector(0, -9), IconFont);
-            var label = Text(items[i].Label, 11, FontWeights.SemiBold, anchor + new Vector(0, 12));
+            var label = Text(items[i].Label, 11 * _textScale, FontWeights.SemiBold, anchor + new Vector(0, 12 * _textScale));
             if (items[i].Beta)
             {
-                label.Inlines.Add(new System.Windows.Documents.Run(" beta") { FontSize = 8, FontWeight = FontWeights.Normal });
+                label.Inlines.Add(new System.Windows.Documents.Run(" beta") { FontSize = 8 * _textScale, FontWeight = FontWeights.Normal });
             }
             _canvas.Children.Add(wedge);
             _canvas.Children.Add(icon);
@@ -113,6 +115,10 @@ internal sealed class WheelWindow : Window
         captionText.Foreground = p.Icon;
         _canvas.Children.Add(countText);
         _canvas.Children.Add(captionText);
+        if (items.Count > 0)
+        {
+            Accessible.Announce(this, $"Morph wheel, {count} {caption}, {items.Count} options");
+        }
     }
 
     /// <summary>Item under a drag position (DragOver coordinates; no mouse events arrive during OLE drags): a wedge, or a preset of the open ring.</summary>
@@ -244,6 +250,10 @@ internal sealed class WheelWindow : Window
         if (index is { } i)
         {
             Paint(i, highlighted, outline: !highlighted);
+            if (highlighted && (index != _highlighted || _highlightedChoice is not null))
+            {
+                Accessible.Announce(this, Spoken(_items[i]));
+            }
         }
 
         _highlighted = index;
@@ -265,8 +275,17 @@ internal sealed class WheelWindow : Window
             _choices[i].Label.Foreground = on ? p.OnAccent : p.Label;
         }
 
+        if (index is { } c && _expanded is { } open)
+        {
+            Accessible.Announce(this, Spoken(_items[open].Choices![c]));
+        }
+
         _highlightedChoice = index;
     }
+
+    // What Narrator says for a wedge or preset: the label, "beta", and how many presets its ring has.
+    private static string Spoken(WheelItem item) =>
+        item.Label + (item.Beta ? ", beta" : "") + (item.Choices is { Count: > 0 } c ? $", {c.Count} presets" : "");
 
     private void Expand(int wedge)
     {
@@ -277,7 +296,7 @@ internal sealed class WheelWindow : Window
         {
             var path = new Path { Data = WheelGeometry.Choice(wedge, _items.Count, i, choices.Count, Centre), StrokeThickness = 1 };
             var anchor = WheelGeometry.PointAt(WheelGeometry.ChoiceAngle(wedge, _items.Count, i, choices.Count), WheelGeometry.RingContentRadius);
-            var label = Text(choices[i].Label, 10.5, FontWeights.SemiBold, anchor);
+            var label = Text(choices[i].Label, 10.5 * _textScale, FontWeights.SemiBold, anchor);
             _canvas.Children.Add(path);
             _canvas.Children.Add(label);
             _choices.Add((path, label));
@@ -334,15 +353,14 @@ internal sealed class WheelWindow : Window
     private static TextBlock Text(string text, double size, FontWeight weight, Point offset, FontFamily? font = null)
     {
         const double width = 100;
-        var t = new TextBlock
-        {
-            Text = text,
-            FontSize = size,
-            FontWeight = weight,
-            Width = width,
-            TextAlignment = TextAlignment.Center,
-            IsHitTestVisible = false,
-        };
+        var t = font is null ? new TextBlock() : new Glyph();
+        t.Text = text;
+        t.FontSize = size;
+        t.FontWeight = weight;
+        t.Width = width;
+        t.TextAlignment = TextAlignment.Center;
+        t.IsHitTestVisible = false;
+        t.TextTrimming = TextTrimming.CharacterEllipsis;
         if (font is not null)
         {
             t.FontFamily = font;
@@ -351,6 +369,12 @@ internal sealed class WheelWindow : Window
         Canvas.SetLeft(t, Centre.X + offset.X - width / 2);
         Canvas.SetTop(t, Centre.Y + offset.Y - size * 0.68);
         return t;
+    }
+
+    // An icon glyph: a private-use character that Narrator would read as noise, so it stays out of the automation tree.
+    private sealed class Glyph : TextBlock
+    {
+        protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => null!;
     }
 
     /// <summary>
@@ -363,6 +387,13 @@ internal sealed class WheelWindow : Window
         {
             var accent = Frozen(MorphGlass.Accent(dark));
             var onAccent = Frozen(MorphGlass.OnAccent(dark));
+            if (SystemParameters.HighContrast)
+            {
+                // The system's own pair for every surface and text; the highlight pair (via Accent) for the wedge under the pointer.
+                var (back, text) = (SystemColors.WindowBrush, SystemColors.WindowTextBrush);
+                return new(back, back, text, back, text, text, back, accent, onAccent);
+            }
+
             return (dark, glass) switch
             {
                 (false, true) => new(Hex("#FBF7F4"), Hex("#8CFFF3EA"), Hex("#B3FFFFFF"), Hex("#59FFFFFF"), Hex("#6B4630"), Hex("#24150C"), Hex("#99FFFFFF"), accent, onAccent),
